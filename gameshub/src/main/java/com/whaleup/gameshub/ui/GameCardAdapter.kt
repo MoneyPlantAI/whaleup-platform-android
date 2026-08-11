@@ -1,6 +1,5 @@
 package com.whaleup.gameshub.ui
 
-import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,55 +12,57 @@ import com.whaleup.gameshub.util.ImageLoader
 
 class GameCardAdapter(
     private var games: List<AppEntry>,
-    private val onGameClick: (AppEntry) -> Unit
+    private val onGameClick: (AppEntry, Int) -> Unit
 ) : RecyclerView.Adapter<GameCardAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-        val ivIcon: ImageView = view.findViewById(R.id.ivGameIcon)
-        val tvTitle: TextView = view.findViewById(R.id.tvGameTitle)
-        val tvDescription: TextView = view.findViewById(R.id.tvGameDescription)
-        val btnStartPlaying: View = view.findViewById(R.id.btnStartPlaying)
+        val root: View = view.findViewById(R.id.gameCardRoot)
+        val ivBanner: ImageView = view.findViewById(R.id.ivGameBanner)
+        val tvFallbackName: TextView = view.findViewById(R.id.tvFallbackName)
+        val tvNewBadge: TextView = view.findViewById(R.id.tvNewBadge)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_game_card, parent, false)
+
+        val density = parent.context.resources.displayMetrics.density
+        val parentWidth = parent.measuredWidth.takeIf { it > 0 }
+            ?: parent.context.resources.displayMetrics.widthPixels
+        
+        // Equal spacing between row items and column items (12dp total inter-card gap)
+        val marginDp = 6
+        val paddingHorizontalDp = 12
+        val totalSpacingDp = (paddingHorizontalDp * 2) + (marginDp * 4) // 48dp total inset space
+        val paddingTotal = (totalSpacingDp * density).toInt()
+        val cardSize = (parentWidth - paddingTotal) / 2
+        val margin = (marginDp * density).toInt()
+
+        val lp = RecyclerView.LayoutParams(cardSize, (cardSize * 1.01).toInt()).apply {
+            setMargins(margin, margin, margin, margin)
+        }
+        view.layoutParams = lp
         return ViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val game = games[position]
-        
-        holder.tvTitle.text = game.name
-        
-        val subtitle = if (game.description.isNullOrEmpty()) {
-            "Play ${game.name} now!"
+
+        val iconUrl = game.bannerImageUrl.ifEmpty { game.logoUrl.ifEmpty { game.bgUrl } }
+
+        holder.tvFallbackName.text = game.name
+        if (iconUrl.isNotEmpty()) {
+            holder.ivBanner.visibility = View.VISIBLE
+            holder.tvFallbackName.visibility = View.GONE
+            ImageLoader.load(iconUrl, holder.ivBanner)
         } else {
-            game.description
+            holder.ivBanner.visibility = View.GONE
+            holder.tvFallbackName.visibility = View.VISIBLE
         }
-        holder.tvDescription.text = subtitle
-        
-        bindGameImage(holder, game, position)
 
-        holder.btnStartPlaying.setOnClickListener { onGameClick(game) }
-        holder.itemView.setOnClickListener { onGameClick(game) }
-    }
+        holder.tvNewBadge.visibility = View.GONE
 
-    private fun bindGameImage(holder: ViewHolder, game: AppEntry, position: Int) {
-        // Reset states
-        holder.ivIcon.visibility = View.VISIBLE
-        holder.ivIcon.setBackgroundColor(Color.TRANSPARENT)
-
-        when {
-            game.bannerImageUrl.isNotEmpty() -> {
-                ImageLoader.load(game.bannerImageUrl, holder.ivIcon)
-            }
-            else -> {
-                // Fallback: Theme-based background from skeleton loading
-                holder.ivIcon.setImageBitmap(null)
-                holder.ivIcon.setBackgroundResource(R.drawable.skeleton_placeholder)
-            }
-        }
+        holder.root.setOnClickListener { onGameClick(game, position) }
     }
 
     override fun getItemCount() = games.size
@@ -70,5 +71,4 @@ class GameCardAdapter(
         games = newGames
         notifyDataSetChanged()
     }
-
 }

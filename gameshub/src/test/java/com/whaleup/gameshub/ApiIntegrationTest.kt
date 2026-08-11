@@ -11,16 +11,16 @@ class ApiIntegrationTest {
 
     @Test
     fun testHubEndpointMappings() {
-        assertEquals("/api/v1/composite", HubEndpoint.GET_CONFIG.path)
+        assertEquals("/api/1/whaleup/games", HubEndpoint.GET_CONFIG.path)
         assertEquals("config/get-config", HubEndpoint.GET_CONFIG.routeUri)
         
-        assertEquals("/api/v1/composite", HubEndpoint.GET_USER_PROFILE.path)
+        assertEquals("/api/1/whaleup/games", HubEndpoint.GET_USER_PROFILE.path)
         assertEquals("user/get-user", HubEndpoint.GET_USER_PROFILE.routeUri)
         
-        assertEquals("/api/v1/composite", HubEndpoint.GAME_STARTED.path)
+        assertEquals("/api/1/whaleup/games", HubEndpoint.GAME_STARTED.path)
         assertEquals("game/game-started", HubEndpoint.GAME_STARTED.routeUri)
         
-        assertEquals("/api/v1/composite", HubEndpoint.GAME_ENDED.path)
+        assertEquals("/api/1/whaleup/games", HubEndpoint.GAME_ENDED.path)
         assertEquals("game/game-ended", HubEndpoint.GAME_ENDED.routeUri)
     }
 

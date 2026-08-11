@@ -1,52 +1,57 @@
 package com.whaleup.gameshub.ui
 
+import android.animation.ObjectAnimator
 import android.content.Intent
-import android.graphics.Canvas
+import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.ColorFilter
-import android.graphics.LinearGradient
-import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.PixelFormat
-import android.graphics.RadialGradient
-import android.graphics.Shader
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.doOnLayout
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.AppEntry
+import com.whaleup.gameshub.data.BiomeState
 import com.whaleup.gameshub.data.CatalogLoader
 import com.whaleup.gameshub.data.CatalogLoaderCallback
-import com.whaleup.gameshub.data.BiomeState
 import com.whaleup.gameshub.data.GamesHubSession
 import com.whaleup.gameshub.data.HubCatalog
 import com.whaleup.gameshub.data.SDKError
 import com.whaleup.gameshub.launcher.BiomeSdkProps
-import com.whaleup.gameshub.util.ImageLoader
+import com.whaleup.gameshub.messaging.toMap
+import com.whaleup.gameshub.network.APIBridge
+import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.util.SdkErrorPresenter
 import com.whaleup.gameshub.webview.HubWebViewActivity
 import org.json.JSONObject
-import com.whaleup.gameshub.messaging.toMap
 
 class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
 
     private var catalogGames: List<AppEntry> = emptyList()
     private var isGameLaunchInProgress = false
+    private var isLoadingCatalog = false
+    private var activeTab: String = "games" // "games" or "leaderboard"
+
+    private lateinit var gameCardAdapter: GameCardAdapter
+    private lateinit var bannerAdapter: BannerAdapter
+    private lateinit var leaderboardAdapter: LeaderboardAdapter
+
+    private var bannerHandler: Handler = Handler(Looper.getMainLooper())
+    private var bannerRunnable: Runnable? = null
+    private var bannerUrls: List<String> = emptyList()
 
     private var _props: BiomeSdkProps? = null
     var props: BiomeSdkProps?
@@ -67,7 +72,6 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Resolve SDK theme and wrap context to ensure attributes (ghBackgroundColor, etc.) are available
         val theme = props?.currentTheme() ?: GamesHubSession.theme
         val themeResId = if (theme.lowercase() == "dark") R.style.Theme_GamesHub_Dark else R.style.Theme_GamesHub_Light
         val contextThemeWrapper = android.view.ContextThemeWrapper(requireContext(), themeResId)
@@ -78,9 +82,14 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        applyThemeBackground(view)
-        view.findViewById<View>(R.id.gamesListContainer)?.doOnLayout {
-            applyThemeBackground(view)
+        // Load background image from assets
+        try {
+            val ivBg = view.findViewById<ImageView>(R.id.ivHubBg)
+            val isAsset = requireContext().assets.open("onboarding/bg.png")
+            val bitmap = BitmapFactory.decodeStream(isAsset)
+            ivBg.setImageBitmap(bitmap)
+        } catch (e: Exception) {
+            Log.w("GamesHubFragment", "Could not load onboarding/bg.png from assets", e)
         }
 
         // Handle window insets (Edge-to-Edge)
@@ -90,42 +99,241 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
                         WindowInsetsCompat.Type.displayCutout() or
                         WindowInsetsCompat.Type.ime()
             )
-            
-            // Apply top padding to top view (status bar)
             v.updatePadding(top = systemBars.top)
-
-            // Return insets so children can receive them
             insets
         }
 
         setupUI(view)
-        
-        val errorContainer = view.findViewById<View>(R.id.errorContainer)
+
+        val errorContainer = view.findViewById<View>(R.id.flErrorContainer)
         val btnRetry = view.findViewById<View>(R.id.btnRetry)
         btnRetry?.setOnClickListener {
             errorContainer?.visibility = View.GONE
-            view.findViewById<View>(R.id.contentScroll)?.visibility = View.VISIBLE
+            view.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.VISIBLE
             retryAfterInternetError()
         }
 
         initSdk()
-        
-        // Ensure insets are dispatched to this fragment's view
         view.requestApplyInsets()
+    }
+
+    private fun setupUI(view: View) {
+        // 1. Setup 2-Column Game Cards Grid
+        val rvGameCards = view.findViewById<RecyclerView>(R.id.rvGameCards)
+        rvGameCards.layoutManager = GridLayoutManager(requireContext(), 2)
+        gameCardAdapter = GameCardAdapter(emptyList()) { game, pos ->
+            openGame(game, pos)
+        }
+        rvGameCards.adapter = gameCardAdapter
+
+        // 2. Setup Banner ViewPager2
+        val vpBanner = view.findViewById<ViewPager2>(R.id.vpBannerPager)
+        bannerAdapter = BannerAdapter(emptyList()) { url, index ->
+            // Banner click handler
+        }
+        vpBanner.adapter = bannerAdapter
+
+        // 3. Setup Leaderboard List
+        val rvLeaderboard = view.findViewById<RecyclerView>(R.id.rvLeaderboard)
+        rvLeaderboard.layoutManager = LinearLayoutManager(requireContext())
+        leaderboardAdapter = LeaderboardAdapter(emptyList())
+        rvLeaderboard.adapter = leaderboardAdapter
+
+        // 4. Setup Floating Bottom Navigation Bar
+        val tabGames = view.findViewById<View>(R.id.tabGames)
+        val tabLeaderboard = view.findViewById<View>(R.id.tabLeaderboard)
+
+        tabGames.setOnClickListener { switchTab("games") }
+        tabLeaderboard.setOnClickListener { switchTab("leaderboard") }
+
+        updateTabState(view, "games", animate = false)
+
+        // Load sample/initial data for Leaderboard
+        loadSampleLeaderboard()
+    }
+
+    private fun switchTab(tab: String) {
+        if (isLoadingCatalog || view?.findViewById<View>(R.id.flSkeletonContainer)?.visibility == View.VISIBLE) {
+            return
+        }
+        if (activeTab == tab) return
+        activeTab = tab
+        view?.let { updateTabState(it, tab, animate = true) }
+
+        if (tab == "leaderboard") {
+            fetchLeaderboardFromApi()
+        }
+    }
+
+    private fun updateTabState(view: View, tab: String, animate: Boolean) {
+        val scrollGamesTab = view.findViewById<View>(R.id.scrollGamesTab)
+        val containerLeaderboardTab = view.findViewById<View>(R.id.containerLeaderboardTab)
+        val viewActiveNavPill = view.findViewById<View>(R.id.viewActiveNavPill)
+        val flBottomNav = view.findViewById<View>(R.id.flBottomNav)
+
+        val ivTabGamesIcon = view.findViewById<ImageView>(R.id.ivTabGamesIcon)
+        val tvTabGamesText = view.findViewById<TextView>(R.id.tvTabGamesText)
+        val ivTabLeaderboardIcon = view.findViewById<ImageView>(R.id.ivTabLeaderboardIcon)
+        val tvTabLeaderboardText = view.findViewById<TextView>(R.id.tvTabLeaderboardText)
+
+        val isSkeletonVisible = view.findViewById<View>(R.id.flSkeletonContainer)?.visibility == View.VISIBLE
+
+        if (tab == "games") {
+            if (!isSkeletonVisible) scrollGamesTab.visibility = View.VISIBLE
+            containerLeaderboardTab.visibility = View.GONE
+
+            ivTabGamesIcon.setColorFilter(Color.WHITE)
+            tvTabGamesText.setTextColor(Color.WHITE)
+            ivTabLeaderboardIcon.setColorFilter(Color.parseColor("#0A3D68"))
+            tvTabLeaderboardText.setTextColor(Color.parseColor("#0A3D68"))
+        } else {
+            scrollGamesTab.visibility = View.GONE
+            if (!isSkeletonVisible) containerLeaderboardTab.visibility = View.VISIBLE
+
+            ivTabGamesIcon.setColorFilter(Color.parseColor("#0A3D68"))
+            tvTabGamesText.setTextColor(Color.parseColor("#0A3D68"))
+            ivTabLeaderboardIcon.setColorFilter(Color.WHITE)
+            tvTabLeaderboardText.setTextColor(Color.WHITE)
+        }
+
+        flBottomNav.post {
+            val totalWidth = flBottomNav.width - dp(8)
+            val halfWidth = totalWidth / 2
+            val targetX = if (tab == "games") 0f else halfWidth.toFloat()
+
+            viewActiveNavPill.layoutParams = viewActiveNavPill.layoutParams.apply {
+                width = halfWidth
+            }
+
+            if (animate) {
+                ObjectAnimator.ofFloat(viewActiveNavPill, "translationX", targetX).setDuration(260).start()
+            } else {
+                viewActiveNavPill.translationX = targetX
+            }
+        }
+    }
+
+    private fun setupBannerAutoScroll(urls: List<String>) {
+        bannerUrls = urls
+        bannerAdapter.updateUrls(urls)
+        setupBannerDots(urls.size)
+
+        bannerRunnable?.let { bannerHandler.removeCallbacks(it) }
+
+        if (urls.size <= 1) return
+
+        val vpBanner = view?.findViewById<ViewPager2>(R.id.vpBannerPager) ?: return
+        bannerRunnable = object : Runnable {
+            override fun run() {
+                val current = vpBanner.currentItem
+                val next = (current + 1) % urls.size
+                vpBanner.setCurrentItem(next, true)
+                updateBannerDots(next)
+                bannerHandler.postDelayed(this, 5000)
+            }
+        }
+        bannerHandler.postDelayed(bannerRunnable!!, 5000)
+
+        vpBanner.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                super.onPageSelected(position)
+                updateBannerDots(position)
+            }
+        })
+    }
+
+    private fun setupBannerDots(count: Int) {
+        val container = view?.findViewById<LinearLayout>(R.id.llBannerDots) ?: return
+        container.removeAllViews()
+        if (count <= 1) return
+
+        repeat(count) { i ->
+            val dot = View(requireContext()).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    if (i == 0) dp(18) else dp(6),
+                    dp(6)
+                ).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
+                }
+                background = createDotDrawable(i == 0)
+            }
+            container.addView(dot)
+        }
+    }
+
+    private fun updateBannerDots(position: Int) {
+        val container = view?.findViewById<LinearLayout>(R.id.llBannerDots) ?: return
+        for (i in 0 until container.childCount) {
+            val dot = container.getChildAt(i)
+            val isSelected = i == position
+            dot.layoutParams = dot.layoutParams.apply {
+                width = if (isSelected) dp(18) else dp(6)
+            }
+            dot.background = createDotDrawable(isSelected)
+        }
+    }
+
+    private fun createDotDrawable(isSelected: Boolean): android.graphics.drawable.GradientDrawable {
+        return android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = dp(3).toFloat()
+            setColor(if (isSelected) Color.WHITE else Color.parseColor("#66FFFFFF"))
+        }
+    }
+
+    private fun loadSampleLeaderboard() {
+        val currentUserId = BiomeState.getUserProfile()?.basic?.userId ?: "Player1"
+        val sampleItems = listOf(
+            LeaderboardItemData("LeaderPro", 1, 3500, 3600),
+            LeaderboardItemData("GameMaster", 2, 2800, 2700),
+            LeaderboardItemData("StarRunner", 3, 2100, 1800),
+            LeaderboardItemData(currentUserId, 4, 1500, 1200),
+            LeaderboardItemData("CosmicKing", 5, 1200, 950),
+            LeaderboardItemData("LuckyPlayer", 6, 950, 700)
+        )
+        leaderboardAdapter.updateData(sampleItems)
+    }
+
+    private fun fetchLeaderboardFromApi() {
+        APIBridge.getLeaderboard(mapOf("page" to 1, "limit" to 10), object : APICallback {
+            override fun onSuccess(response: String) {
+                try {
+                    val json = JSONObject(response)
+                    val itemsArr = json.optJSONArray("items")
+                    if (itemsArr != null && itemsArr.length() > 0) {
+                        val list = mutableListOf<LeaderboardItemData>()
+                        for (i in 0 until itemsArr.length()) {
+                            val obj = itemsArr.getJSONObject(i)
+                            list.add(
+                                LeaderboardItemData(
+                                    userId = obj.optString("userId", "User_$i"),
+                                    ranking = obj.optInt("ranking", i + 1),
+                                    score = obj.optInt("score", 1000 - i * 50),
+                                    playtime = obj.optInt("playtime", 600)
+                                )
+                            )
+                        }
+                        activity?.runOnUiThread {
+                            leaderboardAdapter.updateData(list)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("GamesHubFragment", "Failed to parse leaderboard response", e)
+                }
+            }
+
+            override fun onError(code: Int, message: String) {
+                Log.w("GamesHubFragment", "Leaderboard fetch error: $code $message")
+            }
+        })
     }
 
     override fun onResume() {
         super.onResume()
         isGameLaunchInProgress = false
-        // Re-apply this fragment's specific props to the shared session when becoming visible
         props?.let {
             GamesHubSession.props = it
         }
-
-        refreshThemeDependentUi()
-
-        // hub_viewed: fires on return visits (catalog already loaded).
-        // On first load it fires from loadCatalog once the real count is known.
         if (catalogGames.isNotEmpty()) {
             fireHubViewedEvent()
         }
@@ -138,21 +346,18 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
 
     override fun onStop() {
         GamesHubSession.removeThemeChangeListener(this)
+        bannerRunnable?.let { bannerHandler.removeCallbacks(it) }
         super.onStop()
     }
 
     override fun onThemeChanged(theme: String) {
         props = props?.copy(theme = theme)
-        refreshThemeDependentUi()
         if (catalogGames.isNotEmpty()) {
-            renderGames(catalogGames)
-        } else {
-            renderSkeletonCards()
+            gameCardAdapter.updateList(catalogGames)
         }
     }
 
     fun retryAfterInternetError() {
-        renderSkeletonCards()
         initSdk()
     }
 
@@ -189,67 +394,72 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
             return
         }
 
-        com.whaleup.gameshub.network.APIBridge.baseUrl = config.apiBaseUrl
-        com.whaleup.gameshub.network.APIBridge.authToken = config.authToken
-        com.whaleup.gameshub.network.APIBridge.userAgent = config.userAgent
-        com.whaleup.gameshub.network.APIBridge.timezone = config.timezone
-        com.whaleup.gameshub.network.APIBridge.setSessionId(BiomeState.getSessionId() ?: config.sessionId)
+        APIBridge.baseUrl = config.apiBaseUrl
+        APIBridge.authToken = config.authToken
+        APIBridge.userAgent = config.userAgent
+        APIBridge.timezone = config.timezone
+        APIBridge.setSessionId(BiomeState.getSessionId() ?: config.sessionId)
 
-        com.whaleup.gameshub.network.APIBridge.getUserProfile(
+        APIBridge.getUserProfile(
             mapOf("userId" to config.userId, "userName" to config.name, "avatarUrl" to config.avatar),
-            object : com.whaleup.gameshub.network.APICallback {
+            object : APICallback {
                 override fun onSuccess(response: String) {
                     try {
                         val profileMap = JSONObject(response).toMap()
-                        com.whaleup.gameshub.data.BiomeState.setUserProfile(profileMap, "server")
+                        BiomeState.setUserProfile(profileMap, "server")
                     } catch (e: Exception) {
                         Log.e("GamesHubFragment", "Error parsing user profile", e)
-                        reportSdkError(
-                            type = com.whaleup.gameshub.data.BiomeMessageType.LOAD_FAILURE,
-                            action = com.whaleup.gameshub.data.BiomeMessageAction.INTERNAL_ERROR,
-                            data = mapOf("reason" to "Failed to parse user profile", "message" to (e.message ?: "Unknown error"))
-                        )
                     }
                     loadCatalog()
                 }
 
                 override fun onError(code: Int, message: String) {
-                    reportSdkError(
-                        type = com.whaleup.gameshub.data.BiomeMessageType.LOAD_FAILURE,
-                        action = com.whaleup.gameshub.data.BiomeMessageAction.INTERNAL_ERROR,
-                        data = mapOf("reason" to "Failed to load user profile", "code" to code, "message" to message)
-                    )
-                    loadCatalog() // Still load catalog even if profile fails
+                    loadCatalog()
                 }
             }
         )
     }
 
-    private fun setupUI(view: View) {
-        disableMotionEventSplitting(view)
-        renderSkeletonCards()
-        applyGameVignettes(view)
-    }
-
-    private fun disableMotionEventSplitting(view: View) {
-        if (view is ViewGroup) {
-            view.isMotionEventSplittingEnabled = false
-            for (i in 0 until view.childCount) {
-                disableMotionEventSplitting(view.getChildAt(i))
-            }
-        }
-    }
-
     private fun loadCatalog() {
+        isLoadingCatalog = true
+        activity?.runOnUiThread {
+            view?.findViewById<View>(R.id.flSkeletonContainer)?.visibility = View.VISIBLE
+            view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.GONE
+            view?.findViewById<View>(R.id.containerLeaderboardTab)?.visibility = View.GONE
+        }
         CatalogLoader.loadFromNetwork(object : CatalogLoaderCallback {
             override fun onSuccess(catalog: HubCatalog) {
+                isLoadingCatalog = false
                 activity?.runOnUiThread {
-                    view?.findViewById<View>(R.id.contentScroll)?.visibility = View.VISIBLE
+                    view?.findViewById<View>(R.id.flSkeletonContainer)?.visibility = View.GONE
+                    if (activeTab == "leaderboard") {
+                        view?.findViewById<View>(R.id.containerLeaderboardTab)?.visibility = View.VISIBLE
+                        view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.GONE
+                    } else {
+                        view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.VISIBLE
+                        view?.findViewById<View>(R.id.containerLeaderboardTab)?.visibility = View.GONE
+                    }
                     catalogGames = catalog.games
-                    renderGames(catalog.games)
+                    gameCardAdapter.updateList(catalog.games)
 
-                    // hub_viewed: fires on initial load once the real game count is known
+                    // Setup Banner: use heroBannerUrls if present, else fallback to game banner images
+                    var heroBanners = catalog.heroBannerUrls.filter { it.isNotBlank() }
+                    if (heroBanners.isEmpty()) {
+                        heroBanners = catalog.games.mapNotNull { it.bannerImageUrl.takeIf { u -> u.isNotBlank() } }
+                    }
+
+                    val bannerContainer = view?.findViewById<View>(R.id.bannerContainer)
+                    if (heroBanners.isNotEmpty()) {
+                        bannerContainer?.visibility = View.VISIBLE
+                        setupBannerAutoScroll(heroBanners)
+                    } else {
+                        bannerContainer?.visibility = View.GONE
+                    }
+
                     fireHubViewedEvent()
+                    
+                    // Check and show Daily Login Overlay if eligible
+                    view?.findViewById<com.whaleup.gameshub.ui.overlay.DailyLoginOverlayView>(R.id.vDailyLoginOverlay)?.showIfEligible()
 
                     GamesHubSession.props?.onMessage?.invoke(
                         com.whaleup.gameshub.data.JsMessage(
@@ -261,18 +471,27 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
             }
 
             override fun onError(error: Exception) {
+                isLoadingCatalog = false
                 activity?.runOnUiThread {
-                    view?.findViewById<View>(R.id.contentScroll)?.visibility = View.VISIBLE
-                    
+                    view?.findViewById<View>(R.id.flSkeletonContainer)?.visibility = View.GONE
+                    if (activeTab == "leaderboard") {
+                        view?.findViewById<View>(R.id.containerLeaderboardTab)?.visibility = View.VISIBLE
+                        view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.GONE
+                    } else {
+                        view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.VISIBLE
+                        view?.findViewById<View>(R.id.containerLeaderboardTab)?.visibility = View.GONE
+                    }
                     Log.e("GamesHubFragment", "Error loading catalog", error)
-                    reportSdkError(
-                        type = com.whaleup.gameshub.data.BiomeMessageType.LOAD_FAILURE,
-                        action = com.whaleup.gameshub.data.BiomeMessageAction.HUB_LOAD_ERROR,
-                        data = mapOf("reason" to "Failed to load game catalog", "message" to (error.message ?: "Unknown error"))
-                    )
                 }
             }
         })
+    }
+
+    fun showGameWinOverlay(gameName: String, coinsEarned: Int) {
+        activity?.runOnUiThread {
+            // For Testing: Use values showGameWinOverlay("Ludo", 100) || actual values: gameName, coinsEarned
+            view?.findViewById<com.whaleup.gameshub.ui.overlay.GameWinOverlayView>(R.id.vGameWinOverlay)?.show(gameName, coinsEarned)
+        }
     }
 
     private fun reportSdkError(type: String, action: String, data: Map<String, Any?>) {
@@ -282,8 +501,8 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         val context = context ?: return
         if (SdkErrorPresenter.isInternetError(context, error)) {
             activity?.runOnUiThread {
-                view?.findViewById<View>(R.id.contentScroll)?.visibility = View.GONE
-                val errorContainer = view?.findViewById<View>(R.id.errorContainer)
+                view?.findViewById<View>(R.id.scrollGamesTab)?.visibility = View.GONE
+                val errorContainer = view?.findViewById<View>(R.id.flErrorContainer)
                 errorContainer?.visibility = View.VISIBLE
 
                 val errorCode = SdkErrorPresenter.errorCodeFor(context, error)
@@ -297,501 +516,6 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         }
     }
 
-    private fun applyThemeBackground(view: View) {
-        val fallbackRadius = resources.displayMetrics.density * 168f
-        val radius = getFirstCardTopInRoot(view)?.toFloat() ?: fallbackRadius
-
-        view.background = GamesHubBackgroundDrawable(isDarkTheme(), radius)
-    }
-
-    private class GamesHubBackgroundDrawable(
-        private val isDark: Boolean,
-        private val cardTop: Float
-    ) : Drawable() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val startColor = Color.parseColor(if (isDark) "#004F73" else "#BCEAFF")
-        private val endColor = Color.parseColor(if (isDark) "#0C191F" else "#FFFFFF")
-        private val matrix = Matrix()
-
-        override fun draw(canvas: Canvas) {
-            val width = bounds.width().toFloat()
-            val height = bounds.height().toFloat()
-
-            if (cardTop > 0 && width > 0) {
-                val rx = width / 2f
-                val ry = cardTop
-
-                val shader = RadialGradient(
-                    0f, 0f, 1f,
-                    intArrayOf(startColor, endColor),
-                    floatArrayOf(0f, 1f),
-                    Shader.TileMode.CLAMP
-                )
-
-                matrix.reset()
-                matrix.setScale(rx, ry)
-                matrix.postTranslate(width / 2f, 0f)
-                shader.setLocalMatrix(matrix)
-
-                paint.shader = shader
-                canvas.drawRect(0f, 0f, width, cardTop, paint)
-
-                // Draw solid endColor from cardTop to height
-                paint.shader = null
-                paint.color = endColor
-                canvas.drawRect(0f, cardTop, width, height, paint)
-            } else {
-                // Fallback: entire background is solid endColor
-                paint.shader = null
-                paint.color = endColor
-                canvas.drawRect(0f, 0f, width, height, paint)
-            }
-        }
-
-        override fun setAlpha(alpha: Int) {
-            paint.alpha = alpha
-        }
-
-        override fun setColorFilter(colorFilter: ColorFilter?) {
-            paint.colorFilter = colorFilter
-        }
-
-        @Deprecated("Deprecated in Java")
-        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
-    }
-
-    private fun refreshThemeDependentUi() {
-        view?.let {
-            applyThemeBackground(it)
-            applyGameVignettes(it)
-        }
-    }
-
-    private fun applyGameVignettes(view: View) {
-        findTaggedViews(view, TAG_VIGNETTE_TOP).forEach {
-            it.background = GameBgVignetteDrawable(isTop = true, isDark = isDarkTheme())
-        }
-        findTaggedViews(view, TAG_VIGNETTE_BOTTOM).forEach {
-            it.background = GameBgVignetteDrawable(isTop = false, isDark = isDarkTheme())
-        }
-    }
-
-    private fun getFirstCardTopInRoot(root: View): Int? {
-        val card = root.findViewById<LinearLayout>(R.id.gamesListContainer)?.getChildAt(0) ?: return null
-        if (root.width == 0 || card.width == 0) return null
-
-        val rootLocation = IntArray(2)
-        val cardLocation = IntArray(2)
-        root.getLocationOnScreen(rootLocation)
-        card.getLocationOnScreen(cardLocation)
-        return (cardLocation[1] - rootLocation[1]).takeIf { it > 0 }
-    }
-
-    private fun renderGames(games: List<AppEntry>) {
-        val container = view?.findViewById<LinearLayout>(R.id.gamesListContainer) ?: return
-        container.removeAllViews()
-        games.forEachIndexed { index, game ->
-            container.addView(createGameSection(game, index))
-        }
-        container.doOnLayout {
-            refreshThemeDependentUi()
-        }
-    }
-
-    private fun renderSkeletonCards() {
-        val container = view?.findViewById<LinearLayout>(R.id.gamesListContainer) ?: return
-        container.removeAllViews()
-        repeat(2) { index ->
-            container.addView(createSkeletonSection(index))
-        }
-        container.doOnLayout {
-            refreshThemeDependentUi()
-        }
-    }
-
-    private fun createSkeletonSection(index: Int): View {
-        val section = FrameLayout(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(289)
-            ).apply {
-                topMargin = if (index == 0) dp(30) else dp(18)
-            }
-            background = createSkeletonBgDrawable()
-        }
-
-        section.addView(View(requireContext()).apply {
-            tag = TAG_VIGNETTE_TOP
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(92),
-                Gravity.TOP
-            )
-        })
-
-        section.addView(View(requireContext()).apply {
-            tag = TAG_VIGNETTE_BOTTOM
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(92),
-                Gravity.BOTTOM
-            )
-        })
-
-        val card = FrameLayout(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            ).apply {
-                leftMargin = dp(16)
-                rightMargin = dp(16)
-            }
-            background = createRoundedCardBackground(
-                radius = dp(22).toFloat(),
-                strokeColor = Color.parseColor(if (isDarkTheme()) "#7C95A4" else "#A9D6E8"),
-                strokeWidth = dp(1)
-            )
-            clipToOutline = true
-        }
-
-        val content = FrameLayout(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            background = createSkeletonContentDrawable()
-            setPadding(dp(15), dp(15), dp(15), dp(13))
-        }
-
-        content.addView(View(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(104), dp(28))
-            background = createSkeletonPillDrawable()
-        })
-
-        content.addView(View(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                dp(114),
-                dp(44),
-                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            )
-            background = createSkeletonButtonDrawable()
-        })
-
-        card.addView(content)
-        section.addView(card)
-        return section
-    }
-
-    private fun createGameSection(game: AppEntry, index: Int): View {
-        // card_position is 1-based per event design spec
-        val cardPosition = index + 1
-
-        val section = FrameLayout(requireContext()).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(289)
-            ).apply {
-                topMargin = if (index == 0) dp(30) else dp(18)
-            }
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openGame(game, cardPosition) }
-        }
-
-        val bgUrl = game.bgUrl.trim()
-        if (bgUrl.isNotEmpty()) {
-            section.addView(ImageView(requireContext()).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    dp(238),
-                    Gravity.CENTER_VERTICAL
-                )
-                contentDescription = null
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                ImageLoader.load(bgUrl, this)
-            })
-        } else {
-            section.background = createMissingBgDrawable()
-        }
-
-        section.addView(View(requireContext()).apply {
-            tag = TAG_VIGNETTE_TOP
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(92),
-                Gravity.TOP
-            )
-        })
-
-        section.addView(View(requireContext()).apply {
-            tag = TAG_VIGNETTE_BOTTOM
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(92),
-                Gravity.BOTTOM
-            )
-        })
-
-        val card = FrameLayout(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            ).apply {
-                leftMargin = dp(16)
-                rightMargin = dp(16)
-            }
-            background = createRoundedCardBackground(radius = dp(22).toFloat())
-            clipToOutline = true
-            setOnClickListener { openGame(game, cardPosition) }
-        }
-
-        val content = FrameLayout(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            // GameCardDrawable is the card DIV above the game bg image:
-            // linear gradient fill @10% opacity, noise @15%, dual inner shadow, no stroke
-            background = GameCardDrawable(dp(22).toFloat())
-            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-            setPadding(dp(15), dp(15), dp(15), dp(13))
-        }
-
-        createBadgeText(game)?.let(content::addView)
-        content.addView(createLogoOrNameView(game))
-        content.addView(TextView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                dp(44),
-                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            )
-            background = requireContext().getDrawable(R.drawable.bg_games_button)
-            gravity = Gravity.CENTER
-            minWidth = dp(114)
-            text = "Play Now"
-            setTextColor(Color.parseColor("#0A0F14"))
-            textSize = 16f
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { openGame(game, cardPosition) }
-        })
-
-        card.addView(content)
-        section.addView(card)
-
-        return section
-    }
-
-    private class GameBgVignetteDrawable(
-        private val isTop: Boolean,
-        private val isDark: Boolean
-    ) : Drawable() {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
-        override fun draw(canvas: Canvas) {
-            val width = bounds.width().toFloat()
-            val height = bounds.height().toFloat()
-            if (width <= 0f || height <= 0f) return
-
-            val colors = if (!isDark && isTop) {
-                intArrayOf(
-                    Color.argb(0, 0xFF, 0xFF, 0xFF),
-                    Color.argb((0.70f * 255f + 0.5f).toInt(), 0xFF, 0xFF, 0xFF),
-                    Color.argb(255, 0xFF, 0xFF, 0xFF),
-                    Color.argb(255, 0xFF, 0xFF, 0xFF)
-                )
-            } else if (!isDark) {
-                intArrayOf(
-                    Color.argb(0, 0xFF, 0xFF, 0xFF),
-                    Color.argb((0.70f * 255f + 0.5f).toInt(), 0xFF, 0xFF, 0xFF),
-                    Color.argb(255, 0xFF, 0xFF, 0xFF),
-                    Color.argb(255, 0xFF, 0xFF, 0xFF)
-                )
-            } else if (isTop) {
-                intArrayOf(
-                    Color.argb(0, 0x33, 0x6B, 0x85),
-                    Color.argb((0.70f * 255f + 0.5f).toInt(), 0x0C, 0x19, 0x1F),
-                    Color.argb(255, 0x0C, 0x19, 0x1F),
-                    Color.argb(255, 0x0C, 0x19, 0x1F)
-                )
-            } else {
-                intArrayOf(
-                    Color.argb(0, 0x33, 0x6B, 0x85),
-                    Color.argb((0.70f * 255f + 0.5f).toInt(), 0x0C, 0x19, 0x1F),
-                    Color.argb(255, 0x0C, 0x19, 0x1F),
-                    Color.argb(255, 0x0C, 0x19, 0x1F)
-                )
-            }
-            val positions = floatArrayOf(0f, 0.30f, 0.61f, 0.94f)
-
-            paint.shader = LinearGradient(
-                0f,
-                if (isTop) height else 0f,
-                0f,
-                if (isTop) 0f else height,
-                colors,
-                positions,
-                Shader.TileMode.CLAMP
-            )
-            canvas.drawRect(bounds, paint)
-        }
-
-        override fun setAlpha(alpha: Int) {
-            paint.alpha = alpha
-        }
-
-        override fun setColorFilter(colorFilter: ColorFilter?) {
-            paint.colorFilter = colorFilter
-        }
-
-        @Deprecated("Deprecated in Java")
-        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
-    }
-
-    private fun createBadgeText(game: AppEntry): TextView? {
-        val pill = getPillConfig(game) ?: return null
-        return TextView(requireContext()).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            background = createBadgeDrawable(pill.borderColor)
-            includeFontPadding = false
-            text = pill.text
-            setTextColor(pill.textColor)
-            textSize = 12f
-        }
-    }
-
-    private fun createLogoOrNameView(game: AppEntry): View {
-        val logoUrl = game.logoUrl.trim()
-        val params = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(232),
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        )
-
-        return if (logoUrl.isNotEmpty()) {
-            ImageView(requireContext()).apply {
-                layoutParams = params
-                contentDescription = null
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                ImageLoader.load(logoUrl, this)
-            }
-        } else {
-            TextView(requireContext()).apply {
-                layoutParams = params
-                gravity = Gravity.CENTER
-                text = game.name
-                setTextColor(if (isDarkTheme()) Color.WHITE else Color.parseColor("#1F2933"))
-                textSize = 34f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-            }
-        }
-    }
-
-    private fun getPillConfig(game: AppEntry): PillConfig? {
-        val pill = game.pill ?: return null
-        val text = pill["text"]?.toString()?.takeIf { it.isNotBlank() } ?: return null
-        val textColor = pill["textColor"]?.toString()?.toColorIntOrNull()
-            ?: pill["color"]?.toString()?.toColorIntOrNull()
-            ?: return null
-        val borderColor = pill["borderColor"]?.toString()?.toColorIntOrNull()
-            ?: pill["color"]?.toString()?.toColorIntOrNull()
-            ?: return null
-        return PillConfig(text = text, textColor = textColor, borderColor = borderColor)
-    }
-
-    private fun createMissingBgDrawable(): GradientDrawable {
-        return GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-//            intArrayOf(
-//                Color.parseColor("#"),
-//                Color.parseColor("#CED2D5")
-//            )
-            if (isDarkTheme()) {
-                intArrayOf(Color.parseColor("#D7DCE0"), Color.parseColor("#D8F0FA"))
-            } else {
-                intArrayOf(Color.parseColor("#F4FBFE"), Color.parseColor("#D8F0FA"))
-            }
-        )
-    }
-
-    private fun createSkeletonBgDrawable(): GradientDrawable =
-        GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            if (isDarkTheme()) {
-                intArrayOf(Color.parseColor("#C7CED3"), Color.parseColor("#9FA9B0"))
-            } else {
-                intArrayOf(Color.parseColor("#F4FBFE"), Color.parseColor("#D8F0FA"))
-            }
-        )
-
-    private fun createSkeletonContentDrawable(): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(22).toFloat()
-            setColor(Color.parseColor(if (isDarkTheme()) "#26000000" else "#66FFFFFF"))
-        }
-
-    private fun createSkeletonPillDrawable(): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(10).toFloat()
-            setColor(Color.parseColor(if (isDarkTheme()) "#2B3B43" else "#EAF7FC"))
-            setStroke(dp(1), Color.parseColor(if (isDarkTheme()) "#45626E" else "#A9D6E8"))
-        }
-
-    private fun createSkeletonButtonDrawable(): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(22).toFloat()
-            setColor(Color.parseColor(if (isDarkTheme()) "#4E6A76" else "#BCEAFF"))
-        }
-
-    private fun createRoundedCardBackground(
-        radius: Float,
-        strokeColor: Int = Color.TRANSPARENT,
-        strokeWidth: Int = 0
-    ): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = radius
-            setColor(Color.TRANSPARENT)
-            if (strokeWidth > 0) setStroke(strokeWidth, strokeColor)
-        }
-
-    private fun createBadgeDrawable(borderColor: Int): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(10).toFloat()
-            // Fill: #0C191F at 75% opacity (alpha = 191 = 0xBF)
-            setColor(Color.argb(191, 0x0C, 0x19, 0x1F))
-            setStroke(dp(1), borderColor)
-            setPadding(dp(10), dp(5), dp(10), dp(5))
-        }
-
-    private fun findTaggedViews(root: View, tag: String): List<View> {
-        val matches = mutableListOf<View>()
-        fun walk(view: View) {
-            if (view.tag == tag) matches.add(view)
-            if (view is ViewGroup) {
-                for (i in 0 until view.childCount) walk(view.getChildAt(i))
-            }
-        }
-        walk(root)
-        return matches
-    }
-
-    private fun isDarkTheme(): Boolean =
-        (props?.currentTheme() ?: GamesHubSession.theme).lowercase() == "dark"
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-
-    private fun String.toColorIntOrNull(): Int? =
-        runCatching { Color.parseColor(this) }.getOrNull()
-
     private fun openGame(game: AppEntry, cardPosition: Int = 0) {
         if (isGameLaunchInProgress) return
         isGameLaunchInProgress = true
@@ -799,7 +523,6 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         val userId = GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
             ?: BiomeState.getUserConfig()?.userId?.takeIf { it.isNotBlank() }
 
-        // hub_game_card_tapped: fires immediately on card tap
         GamesHubSession.props?.onBiomeEvent?.invoke(
             com.whaleup.gameshub.data.SDKEvent(
                 type = com.whaleup.gameshub.data.BiomeMessageType.HUB_EVENT,
@@ -841,7 +564,7 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
                     didStartGame = true
                 }
 
-                else -> { /* ignore other actions */ }
+                else -> { }
             }
         }
 
@@ -850,23 +573,10 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         }
     }
 
-    private fun openUrl(url: String, title: String) {
-        val intent = Intent(requireContext(), HubWebViewActivity::class.java)
-        intent.putExtra("ENTRY_URL", url)
-        intent.putExtra("GAME_NAME", title)
-        startActivity(intent)
-    }
-
-    private data class PillConfig(
-        val text: String,
-        val textColor: Int,
-        val borderColor: Int
-    )
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val TAG_VIGNETTE_TOP = "game_vignette_top"
-        private const val TAG_VIGNETTE_BOTTOM = "game_vignette_bottom"
-
         fun newInstance(props: BiomeSdkProps? = null): GamesHubFragment {
             val fragment = GamesHubFragment()
             fragment.props = props

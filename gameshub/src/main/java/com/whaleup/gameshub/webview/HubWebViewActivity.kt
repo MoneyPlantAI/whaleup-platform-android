@@ -605,11 +605,10 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             HubEndpoint.GAME_ENDED -> APIBridge.gameEnded(
                 requestData, currentGameModeType(), callback
             )
-            /*
-            HubEndpoint.CLAIM_GULLAK -> APIBridge.claimGullak(requestData, callback)
-            */
+            HubEndpoint.CLAIM_GULLAK -> APIBridge.claimGullak(requestUserId ?: "", callback)
             HubEndpoint.GET_CONFIG -> APIBridge.getConfig(callback)
             HubEndpoint.CATALOG -> APIBridge.get(endpoint, callback)
+            HubEndpoint.GET_LEADERBOARD -> APIBridge.getLeaderboard(requestData, callback)
         }
     }
 

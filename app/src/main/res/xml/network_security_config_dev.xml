@@ -7,7 +7,6 @@
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
-        <domain includeSubdomains="true">46.202.177.225</domain>
-        <domain includeSubdomains="true">hikeapp-preprod.whaleupco.in</domain>
+        <domain includeSubdomains="true">whaleup-platform-prod.whaleupco.in</domain>
     </domain-config>
 </network-security-config>

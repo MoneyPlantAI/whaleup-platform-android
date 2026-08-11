@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/ivBannerImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        tools:src="@android:drawable/ic_menu_gallery" />
+
+    <!-- Skeleton Placeholder Overlay (Matches RN Banner.tsx skeletonPlaceholder) -->
+    <FrameLayout
+        android:id="@+id/flBannerSkeleton"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#2E2D2D"
+        android:visibility="visible">
+
+        <ProgressBar
+            android:id="@+id/pbBannerLoading"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="#E54409" />
+    </FrameLayout>
+
+</FrameLayout>

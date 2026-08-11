@@ -32,6 +32,13 @@ object BiomeState {
     private var currentGameId: String? = null
     private var currentGameIsMaxGameBonusEarned: Boolean = false
     private var sessionId: String? = null
+    private var bonusConfig: BonusConfig? = null
+
+    fun getBonusConfig(): BonusConfig? = bonusConfig
+
+    fun setBonusConfig(config: BonusConfig?) {
+        bonusConfig = config
+    }
 
     /**
      * Initialize with application context. Must be called before any other method.

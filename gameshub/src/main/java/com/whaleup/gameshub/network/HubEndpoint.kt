@@ -6,18 +6,21 @@ package com.whaleup.gameshub.network
  */
 enum class HubEndpoint(val path: String, val routeUri: String) {
     // Catalog
-    CATALOG("/api/v1/composite", "config/get-config"),
+    CATALOG("/api/1/whaleup/games", "config/get-config"),
 
     // User Management
-    GET_USER_PROFILE("/api/v1/composite", "user/get-user"),
-    GET_CONFIG      ("/api/v1/composite", "config/get-config"),
+    GET_USER_PROFILE("/api/1/whaleup/games", "user/get-user"),
+    GET_CONFIG      ("/api/1/whaleup/games", "config/get-config"),
 
     // Game Management
-    GAME_STARTED("/api/v1/composite", "game/game-started"),
-    GAME_ENDED("/api/v1/composite", "game/game-ended");
+    GAME_STARTED("/api/1/whaleup/games", "game/game-started"),
+    GAME_ENDED("/api/1/whaleup/games", "game/game-ended"),
 
-    // Gullak / Rewards (Reserved for future use)
-    // CLAIM_GULLAK("/api/v1/composite", "game/claim-gullak"),
+    // Leaderboard
+    GET_LEADERBOARD("/api/1/whaleup/games", "user/get-leaderboard"),
+
+    // Gullak / Rewards
+    CLAIM_GULLAK("/api/1/whaleup/games", "user/claim-gullak");
 
     companion object {
         /**

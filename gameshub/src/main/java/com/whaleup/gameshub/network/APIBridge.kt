@@ -58,7 +58,7 @@ object APIBridge {
 
     private fun String.isUsableSessionId(): Boolean =
         isNotBlank() && this != "sessionId"
-    var compositeEndpoint: String = "/api/v1/composite"
+    var compositeEndpoint: String = "/api/1/whaleup/games"
         set(value) {
             field = if (value.startsWith("/")) value else "/$value"
             Log.d(TAG, "Composite endpoint updated to: $field")
@@ -200,7 +200,12 @@ object APIBridge {
     */
 
     fun getConfig(callback: APICallback) {
-        compositeRequest("POST", HubEndpoint.GET_CONFIG, emptyMap(), callback)
+        compositeRequest("GET", HubEndpoint.GET_CONFIG, emptyMap(), callback)
+    }
+
+    fun claimGullak(userId: String, callback: APICallback) {
+        val payload = mapOf("userId" to userId)
+        compositeRequest("POST", HubEndpoint.CLAIM_GULLAK, payload, callback)
     }
 
     suspend fun getMultiplayerTicketSuspend(playerId: String, engineUrl: String): String {
@@ -345,6 +350,10 @@ object APIBridge {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    fun getLeaderboard(data: Map<String, Any?>? = null, callback: APICallback) {
+        compositeRequest("POST", HubEndpoint.GET_LEADERBOARD, data, callback)
     }
 
     private fun isNetworkAvailable(): Boolean {

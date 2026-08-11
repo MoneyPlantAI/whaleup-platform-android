@@ -4,23 +4,83 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.whaleup.gameshub.messaging.toMap
 
+data class CoinBonus(
+    val loginDay: Int,
+    val loginBonus: Int,
+    val perGameBonus: Int
+)
+
+data class BonusConfigImages(
+    val treasureBox: String? = null,
+    val supercoinIcon: String? = null
+)
+
+data class BonusConfig(
+    val rewardsJourneyDays: Int = 7,
+    val afterJourneyDailyRewardCoins: Int = 50,
+    val coinBonus: List<CoinBonus> = emptyList(),
+    val images: BonusConfigImages = BonusConfigImages()
+) {
+    companion object {
+        fun fromJson(json: JSONObject?): BonusConfig {
+            if (json == null) return BonusConfig()
+            val coinBonusList = ArrayList<CoinBonus>()
+            val coinArr = json.optJSONArray("coinBonus")
+            if (coinArr != null) {
+                for (i in 0 until coinArr.length()) {
+                    val obj = coinArr.optJSONObject(i) ?: continue
+                    coinBonusList.add(
+                        CoinBonus(
+                            loginDay = obj.optInt("loginDay", i + 1),
+                            loginBonus = obj.optInt("loginBonus", 50),
+                            perGameBonus = obj.optInt("perGameBonus", 10)
+                        )
+                    )
+                }
+            }
+            val imgObj = json.optJSONObject("images")
+            val images = BonusConfigImages(
+                treasureBox = imgObj?.optString("treasureBox", null)?.takeIf { it.isNotBlank() },
+                supercoinIcon = imgObj?.optString("supercoinIcon", null)?.takeIf { it.isNotBlank() }
+            )
+            return BonusConfig(
+                rewardsJourneyDays = json.optInt("rewardsJourneyDays", 7),
+                afterJourneyDailyRewardCoins = json.optInt("afterJourneyDailyRewardCoins", 50),
+                coinBonus = coinBonusList,
+                images = images
+            )
+        }
+    }
+}
+
 data class HubCatalog(
     val games: List<AppEntry>,
     val categories: List<String>,
-    val heroBannerUrls: List<String> = emptyList()
+    val heroBannerUrls: List<String> = emptyList(),
+    val bonusConfig: BonusConfig = BonusConfig()
 ) {
     companion object {
         fun fromJson(json: JSONObject): HubCatalog {
+            val targetJson = json.optJSONObject("data") 
+                ?: json.optJSONObject("config") 
+                ?: json.optJSONObject("body") 
+                ?: json
+
             val games = ArrayList<AppEntry>()
-            val gamesArray = json.optJSONArray("games")
+            val gamesArray = targetJson.optJSONArray("games") 
+                ?: json.optJSONArray("games")
             if (gamesArray != null) {
                 for (i in 0 until gamesArray.length()) {
-                    games.add(AppEntry.fromJson(gamesArray.getJSONObject(i)))
+                    val gameObj = gamesArray.optJSONObject(i)
+                    if (gameObj != null) {
+                        games.add(AppEntry.fromJson(gameObj))
+                    }
                 }
             }
 
             val categories = ArrayList<String>()
-            val catsArray = json.optJSONArray("categories")
+            val catsArray = targetJson.optJSONArray("categories") 
+                ?: json.optJSONArray("categories")
             if (catsArray != null) {
                 for (i in 0 until catsArray.length()) {
                     categories.add(catsArray.getString(i))
@@ -28,14 +88,37 @@ data class HubCatalog(
             }
 
             val heroBannerUrls = ArrayList<String>()
-            val heroArray = json.optJSONArray("heroBannerUrls")
-            if (heroArray != null) {
-                for (i in 0 until heroArray.length()) {
-                    heroBannerUrls.add(heroArray.getString(i))
+            fun extractUrls(arr: JSONArray?) {
+                if (arr == null) return
+                for (i in 0 until arr.length()) {
+                    val str = arr.optString(i, "")
+                    if (str.isNotBlank() && str.startsWith("http") && !heroBannerUrls.contains(str)) {
+                        heroBannerUrls.add(str)
+                    }
                 }
             }
 
-            return HubCatalog(games, categories, heroBannerUrls)
+            val bonusObj = targetJson.optJSONObject("bonus") ?: json.optJSONObject("bonus")
+
+            // Check JSONArray locations for hero banners
+            extractUrls(targetJson.optJSONArray("heroBannerUrls"))
+            extractUrls(targetJson.optJSONArray("heroBannerUrl"))
+            extractUrls(json.optJSONArray("heroBannerUrls"))
+            extractUrls(json.optJSONArray("heroBannerUrl"))
+
+            if (bonusObj != null) {
+                extractUrls(bonusObj.optJSONArray("heroBannerUrl"))
+                extractUrls(bonusObj.optJSONArray("heroBannerUrls"))
+
+                val singleUrl = bonusObj.optString("heroBannerUrl", "")
+                if (singleUrl.isNotBlank() && singleUrl.startsWith("http") && !heroBannerUrls.contains(singleUrl)) {
+                    heroBannerUrls.add(singleUrl)
+                }
+            }
+
+            val bonusConfig = BonusConfig.fromJson(bonusObj)
+
+            return HubCatalog(games, categories, heroBannerUrls, bonusConfig)
         }
     }
 }
@@ -57,15 +140,32 @@ data class AppEntry(
         fun fromJson(json: JSONObject): AppEntry {
             val config = json.optJSONObject("gameConfig")?.toMap() ?: emptyMap()
             val configPill = (config["pill"] as? Map<*, *>)?.toStringKeyMap()
+
+            fun strIsValidUrl(str: String): Boolean =
+                str.startsWith("http://") || str.startsWith("https://")
+
+            fun getValidUrl(vararg keys: String): String {
+                for (key in keys) {
+                    val valStr = json.optString(key, "")
+                    if (valStr.isNotBlank() && strIsValidUrl(valStr)) {
+                        return valStr
+                    }
+                }
+                return ""
+            }
+
+            val bannerUrl = getValidUrl("bannerImageUrl", "imageUrl", "bannerUrl", "iconUrl", "icon")
+
             return AppEntry(
                 id = json.optString("id", json.optString("gameId", "")),
                 name = json.optString("name", json.optString("gameName", "Unknown")),
                 category = json.optString("category", "General"),
-                entryUrl = json.optString("entryUrl", ""),
+                entryUrl = json.optString("entryUrl", json.optString("url", "")),
                 gameEngineUrl = json.optNullableString("gameEngineUrl"),
-                bannerImageUrl = json.optString("bannerImageUrl", json.optString("imageUrl", "")),
+                bannerImageUrl = bannerUrl,
                 bgUrl = json.optString("bgUrl", config["bgUrl"]?.toString().orEmpty()),
-                logoUrl = json.optString("logoUrl", config["logoUrl"]?.toString().orEmpty()),
+                logoUrl = getValidUrl("logoUrl", "iconUrl", "icon")
+                    .ifEmpty { config["logoUrl"]?.toString().orEmpty() },
                 pill = json.optJSONObject("pill")?.toMap() ?: configPill,
                 description = json.optString("description", ""),
                 gameConfig = config
