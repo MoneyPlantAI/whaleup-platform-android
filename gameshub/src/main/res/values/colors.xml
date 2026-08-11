@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_dark">#0D1117</color>
+    <color name="surface_dark">#161B22</color>
+    <color name="divider_color">#30363D</color>
+
+    <color name="primary_blue">#00A3FF</color>
+    <color name="primary_variant">#0077B6</color>
+    <color name="accent_teal">#00E5FF</color>
+
+    <color name="text_white">#FFFFFF</color>
+    <color name="text_grey_secondary">#8B949E</color>
+
+    <color name="header_gradient_start">#0D1117</color>
+    <color name="header_gradient_end">#162431</color>
+
+    <color name="background_light">#FFFFFF</color>
+    <color name="surface_light_gray">#F8F9FA</color>
+    <color name="divider_light">#E0E0E0</color>
+
+    <color name="whaleup_primary_blue">#00A3FF</color>
+    <color name="whaleup_blue_variant">#0084FF</color>
+    <color name="whaleup_banner_tint">#E1F5FE</color>
+
+    <color name="text_primary_black">#000000</color>
+    <color name="text_secondary_gray">#757575</color>
+    <color name="text_on_primary">#FFFFFF</color>
+
+    <color name="dialog_background">#FFFFFF</color>
+    <color name="dialog_button_positive">#00A3FF</color>
+    <color name="dialog_button_negative">#757575</color>
+
+    <color name="ftue_overlay_light">#E5FFFFFF</color>
+    <color name="ftue_overlay_dark">#F20D1117</color>
+    <color name="ftue_card_dark">#65000000</color>
+</resources>

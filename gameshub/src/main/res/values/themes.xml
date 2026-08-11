@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.GamesHub.Base" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Default values -->
+    </style>
+
+    <style name="Theme.GamesHub.Light" parent="Theme.GamesHub.Base">
+        <item name="ghBackgroundColor">@color/background_light</item>
+        <item name="ghSurfaceColor">@color/surface_light_gray</item>
+        <item name="ghDividerColor">@color/divider_light</item>
+        <item name="ghTextColorPrimary">@color/text_primary_black</item>
+        <item name="ghTextColorSecondary">@color/text_secondary_gray</item>
+        <item name="ghPrimaryColor">@color/whaleup_primary_blue</item>
+        <item name="ghAccentColor">@color/accent_teal</item>
+
+        <item name="ghChipSelectedColor">@color/whaleup_primary_blue</item>
+        <item name="ghChipUnselectedColor">@color/surface_light_gray</item>
+        <item name="ghChipSelectedTextColor">@color/text_white</item>
+        <item name="ghChipUnselectedTextColor">@color/text_primary_black</item>
+        <item name="ghFtueOverlayColor">@color/ftue_overlay_light</item>
+        <item name="ghFtueCardBackgroundColor">?attr/ghSurfaceColor</item>
+        
+        <item name="colorPrimary">@color/whaleup_primary_blue</item>
+        <item name="colorPrimaryDark">@color/whaleup_blue_variant</item>
+        <item name="colorAccent">@color/accent_teal</item>
+    </style>
+
+    <style name="Theme.GamesHub.Dark" parent="Theme.AppCompat.NoActionBar">
+        <item name="ghBackgroundColor">@color/background_dark</item>
+        <item name="ghSurfaceColor">@color/surface_dark</item>
+        <item name="ghDividerColor">@color/divider_color</item>
+        <item name="ghTextColorPrimary">@color/text_white</item>
+        <item name="ghTextColorSecondary">@color/text_grey_secondary</item>
+        <item name="ghPrimaryColor">@color/primary_blue</item>
+        <item name="ghAccentColor">@color/accent_teal</item>
+
+        <item name="ghChipSelectedColor">@color/primary_blue</item>
+        <item name="ghChipUnselectedColor">@color/surface_dark</item>
+        <item name="ghChipSelectedTextColor">@color/text_white</item>
+        <item name="ghChipUnselectedTextColor">@color/text_grey_secondary</item>
+        <item name="ghFtueOverlayColor">@color/ftue_overlay_dark</item>
+        <item name="ghFtueCardBackgroundColor">@color/ftue_card_dark</item>
+
+        <item name="colorPrimary">@color/primary_blue</item>
+        <item name="colorPrimaryDark">@color/background_dark</item>
+        <item name="colorAccent">@color/accent_teal</item>
+        
+        <!-- For components that use default android/appcompat attributes -->
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:textColorPrimary">@color/text_white</item>
+    </style>
+</resources>

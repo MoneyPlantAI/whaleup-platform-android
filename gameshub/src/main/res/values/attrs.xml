@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="ghBackgroundColor" format="color" />
+    <attr name="ghSurfaceColor" format="color" />
+    <attr name="ghDividerColor" format="color" />
+    <attr name="ghTextColorPrimary" format="color" />
+    <attr name="ghTextColorSecondary" format="color" />
+    <attr name="ghPrimaryColor" format="color" />
+    <attr name="ghAccentColor" format="color" />
+    
+    <attr name="ghChipSelectedColor" format="color" />
+    <attr name="ghChipUnselectedColor" format="color" />
+    <attr name="ghChipSelectedTextColor" format="color" />
+    <attr name="ghChipUnselectedTextColor" format="color" />
+    <attr name="ghFtueOverlayColor" format="color" />
+    <attr name="ghFtueCardBackgroundColor" format="color" />
+</resources>
