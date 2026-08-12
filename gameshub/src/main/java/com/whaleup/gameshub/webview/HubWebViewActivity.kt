@@ -74,7 +74,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
     override fun onCreate(savedInstanceState: Bundle?) {
-        setTheme(GamesHubSession.getThemeResId())
+        setTheme(com.whaleup.gameshub.R.style.Theme_GamesHub_Light)
         enableEdgeToEdge()
         window.setBackgroundDrawable(ColorDrawable(Color.parseColor("#00A8F3")))
         super.onCreate(savedInstanceState)
@@ -353,12 +353,12 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                 }
 
                 is RouteAction.Close -> {
-                    GamesHubSession.props?.closeBiome?.invoke()
+                    GamesHubSession.props?.onClose?.invoke()
                     finish()
                 }
 
                 is RouteAction.CloseSdk -> {
-                    GamesHubSession.props?.closeBiome?.invoke()
+                    (GamesHubSession.props?.onCloseSdk ?: GamesHubSession.props?.onClose)?.invoke()
                     finish()
                 }
 
@@ -654,7 +654,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     private fun handleHostDecision(action: RouteAction.HostDecision) {
         when (action.strategy) {
             "exit", "exitExperience" -> {
-                GamesHubSession.props?.closeBiome?.invoke()
+                GamesHubSession.props?.onClose?.invoke()
                 finish()
             }
             "returnToHub" -> finish()
@@ -879,7 +879,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
     private fun notifySdkEvent(event: BiomeSdkEvent) {
         val eventData = enrichSdkEventData(event.data)
-        GamesHubSession.props?.onBiomeEvent?.invoke(
+        GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             SDKEvent(type = event.type, action = event.action, message = event.message, data = eventData)
         )
     }

@@ -16,10 +16,10 @@ A native Android SDK that embeds the Whaleup GamesHub experience inside any host
 - [UserConfig](#userconfig)
 - [Callbacks](#callbacks)
   - [onMessage](#onmessage)
-  - [onBiomeEvent](#on-biomeevent)
-  - [onBiomeError](#on-biomeerror)
+  - [onWhaleupSDKEvent](#onwhaleupsdkevent)
+  - [onWhaleupSDKError](#onwhaleupsdkerror)
   - [onPageLoad / onPageError](#onpageload--onpageerror)
-  - [closeBiome](#closebiome)
+  - [onClose / onCloseSdk](#onclose--onclosesdk)
 - [UserProfile](#userprofile)
 - [Game Catalog](#game-catalog)
   - [Catalog Structure](#catalog-structure)
@@ -30,7 +30,6 @@ A native Android SDK that embeds the Whaleup GamesHub experience inside any host
   - [Message Types](#message-types)
   - [Message Actions](#message-actions)
 - [API Endpoints](#api-endpoints)
-- [Theming](#theming)
 - [Permissions](#permissions)
 - [Architecture Overview](#architecture-overview)
 
@@ -131,8 +130,6 @@ import com.whaleup.gameshub.launcher.BiomeSdkProps
 import com.whaleup.gameshub.launcher.GamesHubLauncher
 import com.whaleup.gameshub.data.UserConfig
 
-var appTheme = "light"
-
 val props = BiomeSdkProps(
     userConfig = UserConfig(
         userId = "user_123",
@@ -144,27 +141,21 @@ val props = BiomeSdkProps(
         avatar = "https://example.com/avatar.png",
         compositeEndpoint = "/api/composite"
     ),
-    theme = "light",
-    updateTheme = { appTheme }, // Optional: read the host app's current theme
-    onBiomeEvent = { event ->
+    onWhaleupSDKEvent = { event ->
         Log.d("GamesHub", "Event: ${event.type} / ${event.action}")
     },
-    onBiomeError = { error ->
+    onWhaleupSDKError = { error ->
         Log.e("GamesHub", "Error: ${error.type} / ${error.action}")
     },
-    closeBiome = {
-        // Function that closes the hub
+    onClose = {
+        // Handle an ordinary hub/game close
+    },
+    onCloseSdk = {
+        // Handle an explicit request to close the entire SDK
     }
 )
 
 GamesHubLauncher.open(context, props)
-
-// Later, after SDK initialization:
-GamesHubLauncher.updateTheme("dark")
-
-// Or, if updateTheme reads mutable host state:
-appTheme = "dark"
-GamesHubLauncher.refreshTheme()
 ```
 
 ---
@@ -177,14 +168,13 @@ GamesHubLauncher.refreshTheme()
 |------------------|--------------------------------|----------|----------|-------------|
 | `userConfig`     | `UserConfig`                   | ✅ Yes   | —        | User identity and API configuration |
 | `onMessage`      | `((JsMessage) -> Unit)?`       | No       | `null`   | Raw WebView messages forwarded to the host |
-| `onBiomeError`   | `((SDKError) -> Unit)?`        | No       | `null`   | SDK error events (load failures, JS errors, etc.) |
-| `onBiomeEvent`   | `((SDKEvent) -> Unit)?`        | No       | `null`   | SDK lifecycle events (coins earned, game exited, etc.) |
+| `onWhaleupSDKError` | `((SDKError) -> Unit)?`     | No       | `null`   | SDK error events (load failures, JS errors, etc.) |
+| `onWhaleupSDKEvent` | `((SDKEvent) -> Unit)?`     | No       | `null`   | SDK lifecycle events (coins earned, game exited, etc.) |
 | `onPageLoad`     | `((String) -> Unit)?`          | No       | `null`   | Called with the URL when a page loads successfully |
 | `onPageError`    | `((String) -> Unit)?`          | No       | `null`   | Called with an error message when a page fails to load |
-| `closeBiome`     | `(() -> Unit)?`                | No       | `null`   | Called when the SDK requests the host to close the hub |
+| `onClose`        | `(() -> Unit)?`                | No       | `null`   | Called for an ordinary `close` or exit request |
+| `onCloseSdk`     | `(() -> Unit)?`                | No       | `null`   | Called for an explicit `closeSdk` request; falls back to `onClose` when omitted |
 | `allowedDomains` | `List<String>?`                | No       | `null`   | Allowlist of domains the WebView may navigate to |
-| `theme`          | `String`                       | No       | `"light"` | UI theme: `"light"` or `"dark"` |
-| `updateTheme`    | `(() -> String)?`              | No       | `null`   | Optional function used to resolve the latest theme |
 
 ---
 
@@ -221,12 +211,12 @@ onMessage = { message: JsMessage ->
 }
 ```
 
-### onBiomeEvent
+### onWhaleupSDKEvent
 
 Receives lifecycle and gameplay events from the SDK.
 
 ```kotlin
-onBiomeEvent = { event: SDKEvent ->
+onWhaleupSDKEvent = { event: SDKEvent ->
     when (event.action) {
         "coinsEarned"    -> handleCoinsEarned(event.data)
         "gemsEarned"     -> handleGemsEarned(event.data)
@@ -235,12 +225,12 @@ onBiomeEvent = { event: SDKEvent ->
 }
 ```
 
-### onBiomeError
+### onWhaleupSDKError
 
 Receives error events such as load failures, network interruptions, and JS crashes.
 
 ```kotlin
-onBiomeError = { error: SDKError ->
+onWhaleupSDKError = { error: SDKError ->
     // error.type   – e.g. "loadFailure", "jsError"
     // error.action – e.g. "gameLoadFailed", "fatalJsError"
     // error.data   – Map<String, Any?> with error details
@@ -256,13 +246,16 @@ onPageLoad  = { url: String -> /* page loaded successfully */ },
 onPageError = { msg: String -> /* page failed to load */ }
 ```
 
-### closeBiome
+### onClose / onCloseSdk
 
-Invoked when the game hub or a game sends a `close` or `closeSdk` message. Use this to finish the host activity or navigate away.
+`onClose` handles ordinary close/exit requests. `onCloseSdk` handles an explicit `closeSdk` request and falls back to `onClose` when omitted.
 
 ```kotlin
-closeBiome = {
+onClose = {
     finish() // or navController.popBackStack()
+},
+onCloseSdk = {
+    finish()
 }
 ```
 
@@ -421,8 +414,8 @@ The SDK uses a bidirectional bridge between the WebView and the native layer. Me
 | `launchGame`   | `BiomeMessageAction.LAUNCH_GAME` | User tapped a game; requires `data.gameId` |
 | `gameLoaded`   | `BiomeMessageAction.GAME_LOADED` | Game WebView is ready; SDK calls `game-started` API |
 | `exitGame`     | `BiomeMessageAction.EXIT_GAME`   | User exited the game; SDK returns to hub |
-| `close`        | `BiomeMessageAction.CLOSE`       | Close hub (bubbled to host via `closeBiome`) |
-| `closeSdk`     | `BiomeMessageAction.CLOSE_SDK`   | Close entire SDK session |
+| `close`        | `BiomeMessageAction.CLOSE`       | Close hub through `onClose` |
+| `closeSdk`     | `BiomeMessageAction.CLOSE_SDK`   | Close the SDK through `onCloseSdk` |
 
 #### Gameplay
 
@@ -430,8 +423,8 @@ The SDK uses a bidirectional bridge between the WebView and the native layer. Me
 |-------------------|-------------------------------------|-------------|
 | `gameStarted`     | `BiomeMessageAction.GAME_STARTED`   | Game session registered with the backend |
 | `gameCompleted`   | `BiomeMessageAction.GAME_COMPLETED` | Game ended; SDK calls `game-ended` API |
-| `coinsEarned`     | `BiomeMessageAction.COINS_EARNED`   | Player earned coins; forwarded via `onBiomeEvent` |
-| `gemsEarned`      | `BiomeMessageAction.GEMS_EARNED`    | Player earned gems; forwarded via `onBiomeEvent` |
+| `coinsEarned`     | `BiomeMessageAction.COINS_EARNED`   | Player earned coins; forwarded via `onWhaleupSDKEvent` |
+| `gemsEarned`      | `BiomeMessageAction.GEMS_EARNED`    | Player earned gems; forwarded via `onWhaleupSDKEvent` |
 
 #### State Sync
 
@@ -487,17 +480,6 @@ The `apiBaseUrl` and `compositeEndpoint` in `UserConfig` control where these req
 
 ---
 
-## Theming
-
-The SDK supports two themes. Pass the desired value in `BiomeSdkProps.theme`:
-
-| Value     | Effect |
-|-----------|--------|
-| `"light"` | Applies `Theme.GamesHub.Light` (default) |
-| `"dark"`  | Applies `Theme.GamesHub.Dark` |
-
----
-
 ## Permissions
 
 The SDK declares no dangerous permissions. The following normal permissions are required and declared in the module manifest:
@@ -516,7 +498,7 @@ Host App
    │
    └── GamesHubLauncher.open(context, BiomeSdkProps)
             │
-            ├── GamesHubSession (global session & theme)
+            ├── GamesHubSession (global session)
             │
             ├── GamesHubActivity  ─── Hub WebView (hub-catalog.json)
             │        │

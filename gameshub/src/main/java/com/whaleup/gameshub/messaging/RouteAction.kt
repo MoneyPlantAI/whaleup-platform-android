@@ -11,10 +11,10 @@ sealed class RouteAction {
     /** Bubble the raw message up to the host app's onMessage callback */
     data class Bubble(val message: BiomeMessage) : RouteAction()
 
-    /** Report an error to the host app's onBiomeError callback */
+    /** Report an error to the host app's onWhaleupSDKError callback */
     data class SdkError(val error: BiomeSdkError) : RouteAction()
 
-    /** Report an event to the host app's onBiomeEvent callback */
+    /** Report an event to the host app's onWhaleupSDKEvent callback */
     data class SdkEvent(val event: BiomeSdkEvent) : RouteAction()
 
     /** Navigate back to the hub */

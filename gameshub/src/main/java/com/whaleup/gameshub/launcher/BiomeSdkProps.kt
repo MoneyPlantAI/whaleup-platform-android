@@ -12,15 +12,11 @@ import com.whaleup.gameshub.data.SDKEvent
 data class BiomeSdkProps(
     val userConfig: UserConfig,
     val onMessage: ((JsMessage) -> Unit)? = null,
-    val onBiomeError: ((SDKError) -> Unit)? = null,
-    val onBiomeEvent: ((SDKEvent) -> Unit)? = null,
+    val onWhaleupSDKError: ((SDKError) -> Unit)? = null,
+    val onWhaleupSDKEvent: ((SDKEvent) -> Unit)? = null,
     val onPageLoad: ((String) -> Unit)? = null,
     val onPageError: ((String) -> Unit)? = null,
-    val closeBiome: (() -> Unit)? = null, // Method to close the biome in host app
-    val allowedDomains: List<String>? = null,
-    val theme: String = "light",
-    val updateTheme: (() -> String)? = null,
-    val isImageGenEnabled: Boolean = false
-) {
-    fun currentTheme(): String = updateTheme?.invoke() ?: theme
-}
+    val onClose: (() -> Unit)? = null,
+    val onCloseSdk: (() -> Unit)? = null,
+    val allowedDomains: List<String>? = null
+)

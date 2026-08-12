@@ -26,7 +26,7 @@ object ContextProvider {
         val app = JSONObject()
         app.put("version", "2.0.0")
         app.put("platform", "android")
-        app.put("theme", com.whaleup.gameshub.data.GamesHubSession.theme)
+        app.put("theme", "light")
         context.put("app", app)
 
         return context.toString()

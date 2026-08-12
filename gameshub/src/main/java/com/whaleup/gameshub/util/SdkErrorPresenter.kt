@@ -39,7 +39,7 @@ object SdkErrorPresenter {
     private var activeDialog: AlertDialog? = null
 
     fun report(context: Context?, error: SDKError) {
-        GamesHubSession.props?.onBiomeError?.invoke(error)
+        GamesHubSession.props?.onWhaleupSDKError?.invoke(error)
         showDialog(context, error)
     }
 
@@ -61,7 +61,7 @@ object SdkErrorPresenter {
                     .setTitle(if (isInternetError) "Internet Connection Issue ($errorCode)" else "GamesHub Error")
                     .setMessage(formatError(context, error, isInternetError))
                     .setPositiveButton(if (isInternetError) "CLOSE" else "Close SDK") { _, _ ->
-                        GamesHubSession.props?.closeBiome?.invoke()
+                        (GamesHubSession.props?.onCloseSdk ?: GamesHubSession.props?.onClose)?.invoke()
                         closeSdkOwnedActivity(activity)
                     }
                     .setCancelable(false)

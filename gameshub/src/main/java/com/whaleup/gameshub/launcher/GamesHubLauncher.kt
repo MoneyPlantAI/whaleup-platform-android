@@ -26,12 +26,4 @@ object GamesHubLauncher {
         GamesHubSession.props = props
         return GamesHubFragment.newInstance(props)
     }
-
-    fun updateTheme(theme: String) {
-        GamesHubSession.updateTheme(theme)
-    }
-
-    fun refreshTheme() {
-        GamesHubSession.refreshTheme()
-    }
 }

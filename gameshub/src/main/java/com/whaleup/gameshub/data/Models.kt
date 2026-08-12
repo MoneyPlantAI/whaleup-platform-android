@@ -28,7 +28,7 @@ data class JsMessage(
 )
 
 /**
- * SDK error reported to the host app via onBiomeError callback.
+ * SDK error reported to the host app via onWhaleupSDKError callback.
  */
 data class SDKError(
     val type: String,
@@ -37,7 +37,7 @@ data class SDKError(
 )
 
 /**
- * SDK event reported to the host app via onBiomeEvent callback.
+ * SDK event reported to the host app via onWhaleupSDKEvent callback.
  */
 data class SDKEvent(
     val type: String,

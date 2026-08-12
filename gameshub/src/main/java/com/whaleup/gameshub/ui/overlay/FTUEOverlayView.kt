@@ -194,7 +194,7 @@ class FTUEOverlayView @JvmOverloads constructor(
         // Fire analytics event
         val userId = GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
             ?: BiomeState.getUserConfig()?.userId
-        GamesHubSession.props?.onBiomeEvent?.invoke(
+        GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             SDKEvent(
                 type = BiomeMessageType.ANALYTICS_EVENT,
                 action = "learn_how_to_closed",

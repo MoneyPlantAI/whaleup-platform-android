@@ -101,21 +101,19 @@ fun WhaleupGamesApp() {
 
     val gamesProps = remember(userConfig) {
         BiomeSdkProps(
-            theme = "dark",
             userConfig = userConfig,
-            isImageGenEnabled = true,
             onMessage = { msg ->
                 Log.d("HostApp", "Received Message: $msg")
                 sdkMessageCount += 1
                 lastSdkMessage = "${msg.type.uppercase()}: ${msg.action}\n${msg.data ?: ""}"
             },
-            onBiomeEvent = { event ->
+            onWhaleupSDKEvent = { event ->
                 Log.d("HostApp", "Received Event: $event")
             },
-            onBiomeError = { error ->
+            onWhaleupSDKError = { error ->
                 Log.e("HostApp", "Received Error: $error")
             },
-            closeBiome = {
+            onClose = {
                 showSdk = false
             }
         )

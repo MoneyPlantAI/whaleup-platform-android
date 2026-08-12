@@ -1,15 +1,12 @@
 package com.whaleup.gameshub.data
 
 import android.util.Log
-import com.whaleup.gameshub.R
 import com.whaleup.gameshub.launcher.BiomeSdkProps
 import com.whaleup.gameshub.network.APIBridge
-import java.util.concurrent.CopyOnWriteArraySet
 
 /**
  * Global session holder for the Biome SDK.
- * Stores the BiomeSdkProps passed at launch time and provides
- * theme resolution for Activities.
+ * Stores the BiomeSdkProps passed at launch time.
  */
 object GamesHubSession {
     private var _props: BiomeSdkProps? = null
@@ -46,40 +43,6 @@ object GamesHubSession {
     private fun String?.isUsableSessionId(): Boolean =
         !isNullOrBlank() && this != "sessionId"
 
-    private val themeListeners = CopyOnWriteArraySet<ThemeChangeListener>()
-
-    val theme: String
-        get() = props?.currentTheme() ?: "light"
-
-    interface ThemeChangeListener {
-        fun onThemeChanged(theme: String)
-    }
-
-    fun addThemeChangeListener(listener: ThemeChangeListener) {
-        themeListeners.add(listener)
-    }
-
-    fun removeThemeChangeListener(listener: ThemeChangeListener) {
-        themeListeners.remove(listener)
-    }
-
-    fun updateTheme(theme: String) {
-        props = props?.copy(theme = theme, updateTheme = null)
-        notifyThemeChanged()
-    }
-
-    fun refreshTheme() {
-        notifyThemeChanged()
-    }
-
-    fun getThemeResId(): Int {
-        return if (theme.lowercase() == "dark") {
-            R.style.Theme_GamesHub_Dark
-        } else {
-            R.style.Theme_GamesHub_Light
-        }
-    }
-
     /**
      * Initialize state managers that need context.
      * Call this from the launcher before starting any activity.
@@ -88,10 +51,5 @@ object GamesHubSession {
         BiomeState.init(context)
         PlayerPrefsManager.init(context)
         APIBridge.init(context)
-    }
-
-    private fun notifyThemeChanged() {
-        val currentTheme = theme
-        themeListeners.forEach { it.onThemeChanged(currentTheme) }
     }
 }

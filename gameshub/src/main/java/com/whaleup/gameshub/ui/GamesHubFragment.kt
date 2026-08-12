@@ -38,7 +38,7 @@ import com.whaleup.gameshub.util.SdkErrorPresenter
 import com.whaleup.gameshub.webview.HubWebViewActivity
 import org.json.JSONObject
 
-class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
+class GamesHubFragment : Fragment() {
 
     private var catalogGames: List<AppEntry> = emptyList()
     private var isGameLaunchInProgress = false
@@ -72,9 +72,7 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        val theme = props?.currentTheme() ?: GamesHubSession.theme
-        val themeResId = if (theme.lowercase() == "dark") R.style.Theme_GamesHub_Dark else R.style.Theme_GamesHub_Light
-        val contextThemeWrapper = android.view.ContextThemeWrapper(requireContext(), themeResId)
+        val contextThemeWrapper = android.view.ContextThemeWrapper(requireContext(), R.style.Theme_GamesHub_Light)
         val localInflater = inflater.cloneInContext(contextThemeWrapper)
         return localInflater.inflate(R.layout.fragment_games_hub, container, false)
     }
@@ -354,22 +352,9 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        GamesHubSession.addThemeChangeListener(this)
-    }
-
     override fun onStop() {
-        GamesHubSession.removeThemeChangeListener(this)
         bannerRunnable?.let { bannerHandler.removeCallbacks(it) }
         super.onStop()
-    }
-
-    override fun onThemeChanged(theme: String) {
-        props = props?.copy(theme = theme)
-        if (catalogGames.isNotEmpty()) {
-            gameCardAdapter.updateList(catalogGames)
-        }
     }
 
     fun retryAfterInternetError() {
@@ -379,7 +364,7 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
     private fun fireHubViewedEvent() {
         val userId = GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
         val sessionId = GamesHubSession.props?.userConfig?.sessionId
-        GamesHubSession.props?.onBiomeEvent?.invoke(
+        GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             com.whaleup.gameshub.data.SDKEvent(
                 type = com.whaleup.gameshub.data.BiomeMessageType.HUB_EVENT,
                 action = com.whaleup.gameshub.data.BiomeMessageAction.HUB_VIEWED,
@@ -519,7 +504,7 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
 
     private fun reportSdkError(type: String, action: String, data: Map<String, Any?>) {
         val error = SDKError(type = type, action = action, data = data)
-        GamesHubSession.props?.onBiomeError?.invoke(error)
+        GamesHubSession.props?.onWhaleupSDKError?.invoke(error)
 
         val context = context ?: return
         if (SdkErrorPresenter.isInternetError(context, error)) {
@@ -546,7 +531,7 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         val userId = GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
             ?: BiomeState.getUserConfig()?.userId?.takeIf { it.isNotBlank() }
 
-        GamesHubSession.props?.onBiomeEvent?.invoke(
+        GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             com.whaleup.gameshub.data.SDKEvent(
                 type = com.whaleup.gameshub.data.BiomeMessageType.HUB_EVENT,
                 action = com.whaleup.gameshub.data.BiomeMessageAction.HUB_GAME_CARD_TAPPED,
