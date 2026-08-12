@@ -1,6 +1,7 @@
 package com.whaleup.gameshub.webview
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -60,6 +61,11 @@ private const val TAG = "HubWebViewActivity"
  * This is the Kotlin equivalent of WhaleupRnSdkView.tsx's processActions + handlers.
  */
 class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRetryHandler {
+
+    companion object {
+        const val EXTRA_REWARD_GAME_NAME = "com.whaleup.gameshub.extra.REWARD_GAME_NAME"
+        const val EXTRA_REWARD_COINS = "com.whaleup.gameshub.extra.REWARD_COINS"
+    }
 
     private lateinit var webView: WebView
     private lateinit var bridge: WhaleBridge
@@ -642,6 +648,18 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                 val gemsEarned = response.optInt("gemsEarned", -1)
                 if (coinsEarned >= 0) BiomeState.incrementCoinsEarned(coinsEarned)
                 if (gemsEarned >= 0) BiomeState.incrementGemsEarned(gemsEarned)
+                if (coinsEarned > 0) {
+                    setResult(
+                        Activity.RESULT_OK,
+                        Intent().apply {
+                            putExtra(
+                                EXTRA_REWARD_GAME_NAME,
+                                this@HubWebViewActivity.intent.getStringExtra("GAME_NAME") ?: "Game"
+                            )
+                            putExtra(EXTRA_REWARD_COINS, coinsEarned)
+                        }
+                    )
+                }
             }
             else -> { /* no post-processing needed */ }
         }

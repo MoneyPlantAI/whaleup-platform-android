@@ -20,7 +20,7 @@ enum class HubEndpoint(val path: String, val routeUri: String) {
     GET_LEADERBOARD("/api/1/whaleup/games", "game/get-leaderboard"),
 
     // Gullak / Rewards
-    CLAIM_GULLAK("/api/1/whaleup/games", "user/claim-gullak");
+    CLAIM_GULLAK("/api/1/whaleup/games", "gullak/claim-gullak");
 
     companion object {
         /**

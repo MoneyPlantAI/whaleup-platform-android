@@ -174,7 +174,7 @@ object APIBridge {
     // region Typed API Methods
 
     fun getUserProfile(data: Map<String, Any?>?, callback: APICallback) {
-        compositeRequest("POST", HubEndpoint.GET_USER_PROFILE, data, callback)
+        compositeRequest("GET", HubEndpoint.GET_USER_PROFILE, data, callback)
     }
 
     fun gameStarted(data: Map<String, Any?>?, gameModeType: String, callback: APICallback) {

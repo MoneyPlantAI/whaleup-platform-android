@@ -22,6 +22,9 @@ class ApiIntegrationTest {
         
         assertEquals("/api/1/whaleup/games", HubEndpoint.GAME_ENDED.path)
         assertEquals("game/game-ended", HubEndpoint.GAME_ENDED.routeUri)
+
+        assertEquals("/api/1/whaleup/games", HubEndpoint.CLAIM_GULLAK.path)
+        assertEquals("gullak/claim-gullak", HubEndpoint.CLAIM_GULLAK.routeUri)
     }
 
     @Test

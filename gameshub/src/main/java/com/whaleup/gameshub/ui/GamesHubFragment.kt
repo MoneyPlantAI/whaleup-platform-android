@@ -1,6 +1,7 @@
 package com.whaleup.gameshub.ui
 
 import android.animation.ObjectAnimator
+import android.app.Activity
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -17,6 +18,7 @@ import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -39,6 +41,24 @@ import com.whaleup.gameshub.webview.HubWebViewActivity
 import org.json.JSONObject
 
 class GamesHubFragment : Fragment() {
+
+    private val gameLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        isGameLaunchInProgress = false
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+
+        val coinsEarned = result.data?.getIntExtra(
+            HubWebViewActivity.EXTRA_REWARD_COINS,
+            0
+        ) ?: 0
+        if (coinsEarned <= 0) return@registerForActivityResult
+
+        val gameName = result.data?.getStringExtra(
+            HubWebViewActivity.EXTRA_REWARD_GAME_NAME
+        ) ?: "Game"
+        showGameWinOverlay(gameName, coinsEarned)
+    }
 
     private var catalogGames: List<AppEntry> = emptyList()
     private var isGameLaunchInProgress = false
@@ -568,7 +588,7 @@ class GamesHubFragment : Fragment() {
                     intent.putExtra("ENTRY_URL", game.entryUrl)
                     intent.putExtra("GAME_ID", game.id)
                     intent.putExtra("GAME_NAME", game.name)
-                    startActivity(intent)
+                    gameLauncher.launch(intent)
                     didStartGame = true
                 }
 

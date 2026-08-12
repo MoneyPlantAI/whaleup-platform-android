@@ -128,12 +128,12 @@ class DailyLoginOverlayView @JvmOverloads constructor(
             }
 
             override fun onError(code: Int, message: String) {
-                // Save locally on completion
-                saveClaimCompleted()
                 post {
                     isClaiming = false
                     btnClaim.alpha = 1.0f
-                    dismiss()
+                    tvTitle.text = "You earned"
+                    tvCtaText.text = "Play & earn"
+                    tvCtaArrow.visibility = View.VISIBLE
                 }
             }
         })

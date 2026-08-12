@@ -224,7 +224,7 @@ object MessageRouter {
                 val completedUserId = BiomeState.getUserConfig()?.userId
                 val sessionId = BiomeState.getSessionId()
                 val playTimeInSec = (msg.data?.get("playTimeInSec") as? Number)?.toInt() ?: 0
-                val coinsEarned = BiomeState.getPerGameCoinReward()
+                val score = (msg.data?.get("score") as? Number)?.toInt() ?: gemsEarned
 
                 // ✅ Optimistic update
 //                if (gemsEarned > 0) {
@@ -248,9 +248,8 @@ object MessageRouter {
                 val payload = mapOf(
                     "userId" to completedUserId,
                     "gameId" to completedGameId,
-                    "sessionId" to (sessionId ?: ""),
-                    "coinsWon" to coinsEarned,
-                    "gemsWon" to gemsEarned,
+                    "gameSessionId" to (sessionId ?: ""),
+                    "score" to score,
                     "playTimeInSec" to playTimeInSec
                 )
 
