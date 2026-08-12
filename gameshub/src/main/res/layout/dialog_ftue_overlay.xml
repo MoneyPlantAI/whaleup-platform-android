@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/flFtueOverlayRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#CFEAFF"
+    android:clickable="true"
+    android:focusable="true"
+    android:visibility="gone">
+
+    <!-- Background Image -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/bg_hub"
+        tools:ignore="ContentDescription" />
+
+    <!-- Soft Color Wash -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#38CFEAFF" />
+
+    <!-- Main Content Container -->
+    <LinearLayout
+        android:id="@+id/llFtueContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- TOP BAR (Safe area top applied dynamically) -->
+        <FrameLayout
+            android:id="@+id/flFtueTopBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="8dp">
+
+            <!-- Pager Dots Indicator -->
+            <LinearLayout
+                android:id="@+id/llFtuePagerDots"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|start"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+
+            <!-- Skip Button -->
+            <TextView
+                android:id="@+id/btnFtueSkip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|end"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
+                android:text="Skip"
+                android:textColor="#1A6FD8"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <!-- SWIPEABLE SLIDES PAGER -->
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/vpFtuePager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- BOTTOM CTA BAR (Safe area bottom applied dynamically) -->
+        <FrameLayout
+            android:id="@+id/flFtueBottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="28dp">
+
+            <!-- 3D CTA Button Shell -->
+            <FrameLayout
+                android:id="@+id/flFtueCtaShell"
+                android:layout_width="match_parent"
+                android:layout_height="64dp">
+
+                <!-- 3D Base Shadow -->
+                <View
+                    android:id="@+id/vFtueCtaBase"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_gravity="bottom"
+                    android:background="@drawable/bg_ftue_cta_base" />
+
+                <!-- 3D Front Face -->
+                <FrameLayout
+                    android:id="@+id/btnFtueCtaFace"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_gravity="top"
+                    android:background="@drawable/bg_ftue_cta_face"
+                    android:clickable="true"
+                    android:elevation="8dp"
+                    android:focusable="true">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvFtueCtaText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Next"
+                            android:textColor="#FFFFFF"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvFtueCtaArrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="→"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </FrameLayout>
+            </FrameLayout>
+        </FrameLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

@@ -458,8 +458,11 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
 
                     fireHubViewedEvent()
                     
-                    // Check and show Daily Login Overlay if eligible
-                    view?.findViewById<com.whaleup.gameshub.ui.overlay.DailyLoginOverlayView>(R.id.vDailyLoginOverlay)?.showIfEligible()
+                    // Check and show FTUE Overlay if eligible, otherwise check Daily Login Overlay
+                    val ftueShown = view?.findViewById<com.whaleup.gameshub.ui.overlay.FTUEOverlayView>(R.id.vFtueOverlay)?.showIfEligible() ?: false
+                    if (!ftueShown) {
+                        view?.findViewById<com.whaleup.gameshub.ui.overlay.DailyLoginOverlayView>(R.id.vDailyLoginOverlay)?.showIfEligible()
+                    }
 
                     GamesHubSession.props?.onMessage?.invoke(
                         com.whaleup.gameshub.data.JsMessage(
@@ -487,9 +490,14 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
         })
     }
 
+    fun showFTUEOverlay() {
+        activity?.runOnUiThread {
+            view?.findViewById<com.whaleup.gameshub.ui.overlay.FTUEOverlayView>(R.id.vFtueOverlay)?.show()
+        }
+    }
+
     fun showGameWinOverlay(gameName: String, coinsEarned: Int) {
         activity?.runOnUiThread {
-            // For Testing: Use values showGameWinOverlay("Ludo", 100) || actual values: gameName, coinsEarned
             view?.findViewById<com.whaleup.gameshub.ui.overlay.GameWinOverlayView>(R.id.vGameWinOverlay)?.show(gameName, coinsEarned)
         }
     }

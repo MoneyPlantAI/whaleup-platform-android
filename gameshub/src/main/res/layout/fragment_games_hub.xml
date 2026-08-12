@@ -398,6 +398,11 @@
             android:id="@+id/vGameWinOverlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <com.whaleup.gameshub.ui.overlay.FTUEOverlayView
+            android:id="@+id/vFtueOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
     </FrameLayout>
 
 </FrameLayout>

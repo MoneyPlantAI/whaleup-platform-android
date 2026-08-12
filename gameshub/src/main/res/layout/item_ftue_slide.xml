@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp">
+
+    <!-- Slide Illustration Container -->
+    <FrameLayout
+        android:id="@+id/flSlideIlloContainer"
+        android:layout_width="match_parent"
+        android:layout_height="290dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
+        android:gravity="center">
+        <!-- Dynamic Illustration Layout Inflated Here -->
+    </FrameLayout>
+
+    <!-- Slide Copy Section -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <!-- Eyebrow -->
+        <TextView
+            android:id="@+id/tvSlideEyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:letterSpacing="0.22"
+            android:textColor="#1A6FD8"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            tools:text="WELCOME" />
+
+        <!-- Sticker Headline Row with Splash Water Drops -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <!-- Left Splash Water Drops -->
+            <FrameLayout
+                android:layout_width="28dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="6dp">
+
+                <View
+                    android:layout_width="7dp"
+                    android:layout_height="10dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="2dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="5dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_splash_drop" />
+            </FrameLayout>
+
+            <!-- Headline Text -->
+            <TextView
+                android:id="@+id/tvSlideHeadline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#1A6FD8"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                tools:text="Dive into WhaleUp" />
+
+            <!-- Right Splash Water Drops (Mirrored) -->
+            <FrameLayout
+                android:layout_width="28dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="6dp"
+                android:rotationY="180">
+
+                <View
+                    android:layout_width="7dp"
+                    android:layout_height="10dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="2dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="9dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_splash_drop" />
+
+                <View
+                    android:layout_width="5dp"
+                    android:layout_height="5dp"
+                    android:layout_gravity="start|top"
+                    android:layout_marginStart="20dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_splash_drop" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- Body -->
+        <TextView
+            android:id="@+id/tvSlideBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:textColor="#A60A3D68"
+            android:textSize="15.5sp"
+            tools:text="Casual games, head-to-head matches, and rewards - all inside one tab." />
+    </LinearLayout>
+
+</LinearLayout>
