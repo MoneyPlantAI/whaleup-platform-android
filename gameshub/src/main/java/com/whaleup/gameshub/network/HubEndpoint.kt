@@ -17,7 +17,7 @@ enum class HubEndpoint(val path: String, val routeUri: String) {
     GAME_ENDED("/api/1/whaleup/games", "game/game-ended"),
 
     // Leaderboard
-    GET_LEADERBOARD("/api/1/whaleup/games", "user/get-leaderboard"),
+    GET_LEADERBOARD("/api/1/whaleup/games", "game/get-leaderboard"),
 
     // Gullak / Rewards
     CLAIM_GULLAK("/api/1/whaleup/games", "user/claim-gullak");

@@ -353,7 +353,7 @@ object APIBridge {
     }
 
     fun getLeaderboard(data: Map<String, Any?>? = null, callback: APICallback) {
-        compositeRequest("POST", HubEndpoint.GET_LEADERBOARD, data, callback)
+        compositeRequest("GET", HubEndpoint.GET_LEADERBOARD, data, callback)
     }
 
     private fun isNetworkAvailable(): Boolean {

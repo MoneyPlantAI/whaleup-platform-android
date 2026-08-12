@@ -148,8 +148,8 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
 
         updateTabState(view, "games", animate = false)
 
-        // Load sample/initial data for Leaderboard
-        loadSampleLeaderboard()
+        // Fetch real API data for Leaderboard
+        fetchLeaderboardFromApi()
     }
 
     private fun switchTab(tab: String) {
@@ -300,16 +300,31 @@ class GamesHubFragment : Fragment(), GamesHubSession.ThemeChangeListener {
                 try {
                     val json = JSONObject(response)
                     val itemsArr = json.optJSONArray("items")
+                        ?: json.optJSONObject("data")?.optJSONArray("items")
+                        ?: json.optJSONObject("body")?.optJSONArray("items")
+                        ?: json.optJSONObject("payload")?.optJSONArray("items")
+
                     if (itemsArr != null && itemsArr.length() > 0) {
                         val list = mutableListOf<LeaderboardItemData>()
                         for (i in 0 until itemsArr.length()) {
                             val obj = itemsArr.getJSONObject(i)
+                            val userId = when {
+                                obj.has("name") && obj.getString("name").isNotBlank() -> obj.getString("name")
+                                obj.has("username") && obj.getString("username").isNotBlank() -> obj.getString("username")
+                                obj.has("userName") && obj.getString("userName").isNotBlank() -> obj.getString("userName")
+                                obj.has("userId") && obj.getString("userId").isNotBlank() -> obj.getString("userId")
+                                else -> "Player_${i + 1}"
+                            }
+                            val ranking = obj.optInt("ranking", obj.optInt("rank", i + 1))
+                            val score = obj.optInt("score", obj.optInt("coins", 1000 - i * 50))
+                            val playtime = obj.optInt("playtime", obj.optInt("playTimeInSec", 600))
+
                             list.add(
                                 LeaderboardItemData(
-                                    userId = obj.optString("userId", "User_$i"),
-                                    ranking = obj.optInt("ranking", i + 1),
-                                    score = obj.optInt("score", 1000 - i * 50),
-                                    playtime = obj.optInt("playtime", 600)
+                                    userId = userId,
+                                    ranking = ranking,
+                                    score = score,
+                                    playtime = playtime
                                 )
                             )
                         }
