@@ -289,18 +289,35 @@ object MessageRouter {
 
                 actions
             }
-            // Not required as of now
-//            BiomeMessageAction.CLAIM_GULLAK -> {
-//                listOf(
-//                    RouteAction.Bubble(msg),
-//                    RouteAction.ApiCall(
-//                        endpoint = "claimGullak",
-//                        data = msg.data,
-//                        respondWith = BiomeMessageAction.GULLAK_CLAIMED_ACK
-//                    )
-//                )
-//            }
-//
+            BiomeMessageAction.CLAIM_GULLAK -> {
+                val userId = BiomeState.getUserConfig()?.userId?.takeIf { it.isNotBlank() }
+                val actions = mutableListOf<RouteAction>(RouteAction.Bubble(msg))
+
+                if (userId != null) {
+                    actions.add(
+                        RouteAction.ApiCall(
+                            endpoint = HubEndpoint.CLAIM_GULLAK.name,
+                            data = mapOf("userId" to userId),
+                            respondWith = BiomeMessageAction.GULLAK_CLAIMED_ACK
+                        )
+                    )
+                } else {
+                    actions.add(
+                        RouteAction.SdkEvent(
+                            BiomeSdkEvent(
+                                type = BiomeMessageType.CRITICAL_FAILURE,
+                                action = "claimGullakError",
+                                message = "Missing userId",
+                                data = emptyMap()
+                            )
+                        )
+                    )
+                    Log.w(TAG, "claimGullak API call NOT added: missing userId")
+                }
+
+                actions
+            }
+
 //            BiomeMessageAction.COINS_EARNED -> {
 //                listOf(
 //                    RouteAction.Bubble(msg),
