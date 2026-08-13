@@ -17,6 +17,5 @@ data class BiomeSdkProps(
     val onPageLoad: ((String) -> Unit)? = null,
     val onPageError: ((String) -> Unit)? = null,
     val onClose: (() -> Unit)? = null,
-    val onCloseSdk: (() -> Unit)? = null,
-    val allowedDomains: List<String>? = null
+    val onCloseSdk: (() -> Unit)? = null
 )

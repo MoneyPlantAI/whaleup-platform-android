@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeState
+import com.whaleup.gameshub.data.GamesHubSession
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.util.ImageLoader
@@ -116,7 +117,15 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         tvCtaArrow.visibility = View.GONE
         tvTitle.text = "Claiming..."
 
-        val userId = BiomeState.getUserProfile()?.basic?.userId ?: ""
+        val userId = BiomeState.getUserProfile()?.basic?.userId?.takeIf { it.isNotBlank() }
+            ?: GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
+            ?: BiomeState.getUserConfig()?.userId?.takeIf { it.isNotBlank() }
+
+        if (userId == null) {
+            restoreClaimButton()
+            return
+        }
+
         APIBridge.claimGullak(userId, object : APICallback {
             override fun onSuccess(response: String) {
                 saveClaimCompleted()
@@ -128,15 +137,17 @@ class DailyLoginOverlayView @JvmOverloads constructor(
             }
 
             override fun onError(code: Int, message: String) {
-                post {
-                    isClaiming = false
-                    btnClaim.alpha = 1.0f
-                    tvTitle.text = "You earned"
-                    tvCtaText.text = "Play & earn"
-                    tvCtaArrow.visibility = View.VISIBLE
-                }
+                post { restoreClaimButton() }
             }
         })
+    }
+
+    private fun restoreClaimButton() {
+        isClaiming = false
+        btnClaim.alpha = 1.0f
+        tvTitle.text = "You earned"
+        tvCtaText.text = "Play & earn"
+        tvCtaArrow.visibility = View.VISIBLE
     }
 
     private fun saveClaimCompleted() {

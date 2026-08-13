@@ -139,7 +139,8 @@ val props = BiomeSdkProps(
         authToken = "your_auth_token",
         name = "John Doe",
         avatar = "https://example.com/avatar.png",
-        compositeEndpoint = "/api/composite"
+        compositeEndpoint = "/api/composite",
+        allowedDomains = listOf("https://*.dev/", "https://whaleupco.in/games/*")
     ),
     onWhaleupSDKEvent = { event ->
         Log.d("GamesHub", "Event: ${event.type} / ${event.action}")
@@ -174,7 +175,6 @@ GamesHubLauncher.open(context, props)
 | `onPageError`    | `((String) -> Unit)?`          | No       | `null`   | Called with an error message when a page fails to load |
 | `onClose`        | `(() -> Unit)?`                | No       | `null`   | Called for an ordinary `close` or exit request |
 | `onCloseSdk`     | `(() -> Unit)?`                | No       | `null`   | Called for an explicit `closeSdk` request; falls back to `onClose` when omitted |
-| `allowedDomains` | `List<String>?`                | No       | `null`   | Allowlist of domains the WebView may navigate to |
 
 ---
 
@@ -193,7 +193,7 @@ GamesHubLauncher.open(context, props)
 | `avatar`             | `String?`       | No       | URL of the user's avatar image |
 | `compositeEndpoint`  | `String?`       | No       | Path for the composite API route (e.g. `/api/composite`) |
 | `userAgent`          | `String?`       | No       | Custom User-Agent string injected into the WebView |
-| `allowedDomains`     | `List<String>?` | No       | Allowed domains for WebView navigation |
+| `allowedDomains`     | `List<String>`  | ✅ Yes   | Navigation allowlist; an empty list blocks remote URLs |
 
 ---
 

@@ -95,7 +95,8 @@ fun WhaleupGamesApp() {
             userAgent = "X-User-Agent: Mozilla/5.0 (Linux; Android 10; ONEPLUS A6010 Build/QKQ1.190716.003) FKUA/Retail/2291126/Android/Mobile (OnePlus/ONEPLUS A6010/dde41b1e061443d95c058e38891c396a)",
             name = "WhaleupFan" + demoUserId.replace("whaleupId", ""),
             avatar = "https://cdn/avatar.png",
-            sessionId = "abc-123-c9c"
+            sessionId = "abc-123-c9c",
+            allowedDomains = listOf("https://*.dev/", "https://whaleupco.in/games/*")
         )
     }
 

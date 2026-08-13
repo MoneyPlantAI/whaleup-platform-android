@@ -12,6 +12,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,10 +20,12 @@ import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -48,6 +51,7 @@ import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.network.HubEndpoint
 import com.whaleup.gameshub.util.InternetErrorRetryHandler
 import com.whaleup.gameshub.util.SdkErrorPresenter
+import com.whaleup.gameshub.util.WebViewDomainPolicy
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import org.json.JSONArray
@@ -74,6 +78,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     private val navigationBarHideRunnable = Runnable { hideBottomNavigationBar() }
     private var entryUrl: String? = null
     private var multiplayerModule: com.whaleup.gameshub.multiplayer.MultiplayerModule? = null
+    private var domainErrorDialog: AlertDialog? = null
 
     // API de-duplication (matches Whaleup's apiInFlightRequests)
     private val apiInFlightRequests = mutableMapOf<String, Boolean>()
@@ -157,6 +162,15 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
         // WebView client with context injection and page load callbacks
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean = shouldBlockNavigation(request?.url)
+
+            @Suppress("DEPRECATION")
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean =
+                shouldBlockNavigation(url?.let(Uri::parse))
+
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 injectContext(view)
@@ -229,7 +243,11 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             return
         }
 
-        webView.loadUrl(entryUrl)
+        if (WebViewDomainPolicy.isAllowed(entryUrl, resolvedAllowedDomains())) {
+            webView.loadUrl(entryUrl)
+        } else {
+            notifyBlockedNavigation(entryUrl)
+        }
     }
 
     override fun onPause() {
@@ -277,6 +295,39 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
         configureSdk(config)
         return config
+    }
+
+    private fun resolvedAllowedDomains(): List<String>? =
+        GamesHubSession.props?.userConfig?.allowedDomains
+            ?: BiomeState.getUserConfig()?.allowedDomains
+
+    private fun shouldBlockNavigation(uri: Uri?): Boolean {
+        val url = uri?.toString() ?: return false
+        if (WebViewDomainPolicy.isAllowed(url, resolvedAllowedDomains())) return false
+
+        notifyBlockedNavigation(url)
+        return true
+    }
+
+    private fun notifyBlockedNavigation(url: String) {
+        val message = "Domain not allowed: $url. Add this domain to userConfig.allowedDomains."
+        Log.w(TAG, message)
+        GamesHubSession.props?.onPageError?.invoke(message)
+        GamesHubSession.props?.onWhaleupSDKError?.invoke(
+            SDKError(
+                type = BiomeMessageType.NAVIGATION_ERROR,
+                action = BiomeMessageAction.NAVIGATION_BLOCKED,
+                data = mapOf("url" to url, "reason" to message, "retryable" to false)
+            )
+        )
+
+        if (isFinishing || isDestroyed || domainErrorDialog?.isShowing == true) return
+        domainErrorDialog = AlertDialog.Builder(this)
+            .setTitle("Domain Not Allowed")
+            .setMessage(message)
+            .setPositiveButton("BACK TO GAMES") { _, _ -> finish() }
+            .setCancelable(false)
+            .show()
     }
 
     private fun configureSdk(config: UserConfig) {
@@ -611,7 +662,10 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             HubEndpoint.GAME_ENDED -> APIBridge.gameEnded(
                 requestData, currentGameModeType(), callback
             )
-            HubEndpoint.CLAIM_GULLAK -> APIBridge.claimGullak(requestUserId ?: "", callback)
+            HubEndpoint.CLAIM_GULLAK -> APIBridge.claimGullak(
+                requestData["userId"] as? String ?: "",
+                callback
+            )
             HubEndpoint.GET_CONFIG -> APIBridge.getConfig(callback)
             HubEndpoint.CATALOG -> APIBridge.get(endpoint, callback)
             HubEndpoint.GET_LEADERBOARD -> APIBridge.getLeaderboard(requestData, callback)

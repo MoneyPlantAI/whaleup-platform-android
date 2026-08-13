@@ -204,6 +204,10 @@ object APIBridge {
     }
 
     fun claimGullak(userId: String, callback: APICallback) {
+        if (userId.isBlank()) {
+            mainHandler.post { callback.onError(400, "Cannot claim reward without a userId") }
+            return
+        }
         val payload = mapOf("userId" to userId)
         compositeRequest("POST", HubEndpoint.CLAIM_GULLAK, payload, callback)
     }

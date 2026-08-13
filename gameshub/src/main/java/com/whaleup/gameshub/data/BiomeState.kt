@@ -439,7 +439,7 @@ object BiomeState {
                 put("authToken", config.authToken)
                 put("name", config.name)
                 put("avatar", config.avatar)
-                put("allowedDomains", JSONArray(config.allowedDomains ?: emptyList<String>()))
+                put("allowedDomains", JSONArray(config.allowedDomains))
             }
             prefs?.edit()?.putString(USER_CONFIG_KEY, json.toString())?.apply()
         } catch (e: Exception) {
@@ -465,8 +465,7 @@ object BiomeState {
             val allowedDomains = allowedDomainsJson?.let { array ->
                 List(array.length()) { index -> array.optString(index) }
                     .filter { it.isNotBlank() }
-                    .takeIf { it.isNotEmpty() }
-            }
+            } ?: emptyList()
 
             UserConfig(
                 userId = userId,

@@ -14,7 +14,7 @@ data class UserConfig(
     val authToken: String? = null,
     val name: String? = null,
     val avatar: String? = null,
-    val allowedDomains: List<String>? = null
+    val allowedDomains: List<String>
 )
 
 /**
