@@ -6,11 +6,10 @@ package com.whaleup.gameshub.data
  */
 data class UserConfig(
     val userId: String,
-    val sessionId: String? = null,
+    val sessionId: String,
     val apiBaseUrl: String,
-    val timezone: String,
-    val compositeEndpoint: String? = null,
-    val userAgent: String? = null,
+    val userAgent: String,
+    val timezone: String? = null,
     val authToken: String? = null,
     val name: String? = null,
     val avatar: String? = null,

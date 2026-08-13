@@ -60,6 +60,7 @@ object APIBridge {
         sessionId = null
         authToken = null
         userAgent = null
+        timezone = null
     }
 
     private fun String.isUsableSessionId(): Boolean =
@@ -70,7 +71,7 @@ object APIBridge {
             Log.d(TAG, "Composite endpoint updated to: $field")
         }
 
-    var timezone: String = "Asia/Kolkata" // Default
+    var timezone: String? = null
 
     // Retry configuration matching defaults
     private var maxRetries = 2
@@ -151,6 +152,59 @@ object APIBridge {
                     onError?.invoke(apiError)
                     callback.onError(-1, e.message ?: "Unknown error")
                 }
+            }
+        }
+    }
+
+    fun customCompositeRequest(
+        method: String,
+        route: String,
+        data: Map<String, Any?>?,
+        endpoint: String?,
+        callback: APICallback
+    ) {
+        executor.execute {
+            try {
+                val normalizedMethod = method.uppercase()
+                require(normalizedMethod.isNotBlank()) { "Custom request method must not be blank" }
+                require(route.isNotBlank()) { "Custom request route must not be blank" }
+                val targetEndpoint = endpoint?.takeIf { it.isNotBlank() } ?: compositeEndpoint
+                val envelope = JSONObject().apply {
+                    put("requestMethod", normalizedMethod)
+                    put("routeUri", route)
+                    put("payload", data?.let(::JSONObject) ?: JSONObject())
+                }
+                val result = executeWithRetry(
+                    "POST",
+                    targetEndpoint,
+                    envelope.toString(),
+                    0,
+                    "route: $route"
+                )
+                val response = JSONObject(result)
+                val isSuccess = response.optBoolean(
+                    "success",
+                    response.optBoolean("isSuccess", response.has("data"))
+                )
+                if (!isSuccess) {
+                    val message = response.optJSONObject("data")?.optString("errorMessage")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: response.optString("error").takeIf { it.isNotBlank() }
+                        ?: "Composite API request failed"
+                    throw IllegalStateException(message)
+                }
+                val responseData = response.opt("data").takeUnless { it == null || it == JSONObject.NULL }
+                    ?: response.opt("body").takeUnless { it == null || it == JSONObject.NULL }
+                    ?: response
+                val serializedResponse = when (responseData) {
+                    is JSONObject, is org.json.JSONArray -> responseData.toString()
+                    is String -> JSONObject.quote(responseData)
+                    is Number, is Boolean -> responseData.toString()
+                    else -> "null"
+                }
+                mainHandler.post { callback.onSuccess(serializedResponse) }
+            } catch (error: Exception) {
+                mainHandler.post { callback.onError(-1, error.message ?: "Unknown error") }
             }
         }
     }
@@ -330,7 +384,9 @@ object APIBridge {
             connection.setRequestProperty("accept", "*/*")
             authToken?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
             userAgent?.let { connection.setRequestProperty("X-User-Agent", it) }
-            connection.setRequestProperty("X-User-Timezone", timezone)
+            timezone?.takeIf { it.isNotBlank() }?.let {
+                connection.setRequestProperty("X-User-Timezone", it)
+            }
             gameModeType?.let {
                 connection.setRequestProperty("X-GAME-MODE-TYPE", it)
             }

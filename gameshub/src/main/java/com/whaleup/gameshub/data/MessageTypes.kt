@@ -110,6 +110,9 @@ object BiomeMessageAction {
     const val UPDATE_PROFILE = "updateProfile"
     const val REQUEST_GAME_CONFIG = "requestGameConfig"
     const val UPDATE_GAME_CONFIG = "updateGameConfig"
+    const val GAME_API_REQUEST = "gameApiRequest"
+    const val GAME_API_RESPONSE = "gameApiResponse"
+    const val CUSTOM_REQUEST = "customRequest"
     const val RESTORE_STATE = "restoreState"
 
     // Load failure actions

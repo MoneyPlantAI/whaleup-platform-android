@@ -30,7 +30,8 @@ object GamesHubSession {
             candidate?.userConfig?.let { config ->
                 PlayerPrefsManager.setUserId(config.userId)
                 val persistedSessionId = PlayerPrefsManager.get("sessionId") as? String
-                val resolvedSessionId = config.sessionId.takeIf { it.isUsableSessionId() }
+                val resolvedSessionId = candidate.sessionId.takeIf { it.isUsableSessionId() }
+                    ?: config.sessionId.takeIf { it.isUsableSessionId() }
                     ?: persistedSessionId.takeIf { it.isUsableSessionId() }
                     ?: java.util.UUID.randomUUID().toString()
                 val resolved = candidate.copy(
@@ -41,6 +42,8 @@ object GamesHubSession {
                 BiomeState.hydrateUserProfile(config.userId)
                 BiomeState.setSessionId(resolvedSessionId)
                 APIBridge.setSessionId(resolvedSessionId)
+                APIBridge.userAgent = resolved.userConfig.userAgent
+                APIBridge.timezone = resolved.userConfig.timezone
             }
             if (candidate == null) _props = null
         }

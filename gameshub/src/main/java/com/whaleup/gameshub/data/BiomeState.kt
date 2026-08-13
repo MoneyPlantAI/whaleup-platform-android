@@ -448,7 +448,6 @@ object BiomeState {
                 put("sessionId", config.sessionId)
                 put("apiBaseUrl", config.apiBaseUrl)
                 put("timezone", config.timezone)
-                put("compositeEndpoint", config.compositeEndpoint)
                 put("userAgent", config.userAgent)
                 put("authToken", config.authToken)
                 put("name", config.name)
@@ -483,11 +482,10 @@ object BiomeState {
 
             UserConfig(
                 userId = userId,
-                sessionId = json.optNullableString("sessionId"),
+                sessionId = json.optNullableString("sessionId") ?: return null,
                 apiBaseUrl = json.getString("apiBaseUrl"),
-                timezone = json.getString("timezone"),
-                compositeEndpoint = json.optNullableString("compositeEndpoint"),
-                userAgent = json.optNullableString("userAgent"),
+                userAgent = json.optNullableString("userAgent") ?: return null,
+                timezone = json.optNullableString("timezone"),
                 authToken = json.optNullableString("authToken"),
                 name = json.optNullableString("name"),
                 avatar = json.optNullableString("avatar"),

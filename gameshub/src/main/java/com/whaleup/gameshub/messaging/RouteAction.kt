@@ -39,7 +39,10 @@ sealed class RouteAction {
     data class ApiCall(
         val endpoint: String,
         val data: Map<String, Any?>?,
-        val respondWith: String? = null
+        val respondWith: String? = null,
+        val method: String? = null,
+        val route: String? = null,
+        val customEndpoint: String? = null
     ) : RouteAction()
 
     /** Request the host app to decide on a recovery strategy */

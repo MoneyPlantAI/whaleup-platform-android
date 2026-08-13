@@ -377,6 +377,28 @@ object MessageRouter {
                 }
             }
 
+            BiomeMessageAction.GAME_API_REQUEST -> {
+                val method = msg.data?.get("method") as? String
+                val route = msg.data?.get("route") as? String
+                if (method.isNullOrBlank() || route.isNullOrBlank()) {
+                    Log.w(TAG, "GAME_API_REQUEST requires method and route")
+                    listOf(RouteAction.Ignore)
+                } else {
+                    @Suppress("UNCHECKED_CAST")
+                    val requestData = msg.data["data"] as? Map<String, Any?>
+                    listOf(
+                        RouteAction.ApiCall(
+                            endpoint = BiomeMessageAction.CUSTOM_REQUEST,
+                            data = requestData,
+                            respondWith = BiomeMessageAction.GAME_API_RESPONSE,
+                            method = method,
+                            route = route,
+                            customEndpoint = msg.data["endpoint"] as? String
+                        )
+                    )
+                }
+            }
+
             else -> listOf(RouteAction.Bubble(msg))
         }
     }
@@ -448,12 +470,14 @@ object MessageRouter {
     private fun routeNetworkInterruption(msg: BiomeMessage): List<RouteAction> {
         return when (msg.action) {
             BiomeMessageAction.NETWORK_INTERRUPTED -> listOf(
-                RouteAction.Bubble(msg),
                 RouteAction.SdkError(
                     BiomeSdkError(
                         type = BiomeMessageType.NETWORK_INTERRUPTION,
                         action = BiomeMessageAction.NETWORK_INTERRUPTED,
-                        data = msg.data
+                        data = mapOf(
+                            "reason" to "Network interruption detected",
+                            "retryable" to true
+                        ) + (msg.data ?: emptyMap())
                     )
                 )
             )
@@ -466,7 +490,6 @@ object MessageRouter {
 
             // Final failure after network interruption (e.g. timeout)
             BiomeMessageAction.NETWORK_LOAD_ERROR -> listOf(
-                RouteAction.Bubble(msg),
                 RouteAction.SdkError(
                     BiomeSdkError(
                         type = BiomeMessageType.NETWORK_INTERRUPTION,

@@ -46,6 +46,7 @@ import com.whaleup.gameshub.messaging.BiomeSdkEvent
 import com.whaleup.gameshub.messaging.RouteAction
 import com.whaleup.gameshub.messaging.SharePayload
 import com.whaleup.gameshub.messaging.toMap
+import com.whaleup.gameshub.messaging.toList
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.network.HubEndpoint
@@ -74,6 +75,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     private lateinit var webView: WebView
     private lateinit var bridge: WhaleBridge
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var networkWasLost = false
     private val navigationBarHideHandler = Handler(Looper.getMainLooper())
     private val navigationBarHideRunnable = Runnable { hideBottomNavigationBar() }
     private var entryUrl: String? = null
@@ -340,9 +342,6 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
         APIBridge.authToken = config.authToken
         APIBridge.userAgent = config.userAgent
         APIBridge.timezone = config.timezone
-        if (!config.compositeEndpoint.isNullOrEmpty()) {
-            APIBridge.compositeEndpoint = config.compositeEndpoint
-        }
         BiomeState.setUserConfig(config)
         APIBridge.setSessionId(
             BiomeState.getSessionId().takeIf { it.isUsableSessionId() }
@@ -573,13 +572,31 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     // region API Handling
 
     private fun handleApiCall(action: RouteAction.ApiCall) {
-        val requestKey = "${action.endpoint}:${action.data}:${action.respondWith ?: "no-response"}"
+        val requestKey = "${action.endpoint}:${action.method}:${action.route}:${action.customEndpoint}:${action.data}:${action.respondWith ?: "no-response"}"
 
         if (apiInFlightRequests.containsKey(requestKey)) {
             Log.d(TAG, "Deduping API request: $requestKey")
             return
         }
         apiInFlightRequests[requestKey] = true
+
+        if (action.endpoint == BiomeMessageAction.CUSTOM_REQUEST) {
+            val method = action.method
+            val route = action.route
+            if (method.isNullOrBlank() || route.isNullOrBlank()) {
+                Log.w(TAG, "Custom request missing method or route")
+                apiInFlightRequests.remove(requestKey)
+                return
+            }
+            APIBridge.customCompositeRequest(
+                method = method,
+                route = route,
+                data = action.data,
+                endpoint = action.customEndpoint,
+                callback = customApiCallback(action, requestKey)
+            )
+            return
+        }
 
         val endpoint = HubEndpoint.fromName(action.endpoint)
         if (endpoint == null) {
@@ -684,6 +701,41 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             HubEndpoint.GET_CONFIG -> APIBridge.getConfig(callback)
             HubEndpoint.CATALOG -> APIBridge.get(endpoint, callback)
             HubEndpoint.GET_LEADERBOARD -> APIBridge.getLeaderboard(requestData, callback)
+        }
+    }
+
+    private fun customApiCallback(
+        action: RouteAction.ApiCall,
+        requestKey: String
+    ): APICallback = object : APICallback {
+        override fun onSuccess(response: String) {
+            apiInFlightRequests.remove(requestKey)
+            val responseData = runCatching {
+                when (val value = org.json.JSONTokener(response).nextValue()) {
+                    is JSONObject -> value.toMap()
+                    is org.json.JSONArray -> value.toList()
+                    JSONObject.NULL -> null
+                    else -> value
+                }
+            }.getOrElse { response }
+            action.respondWith?.let {
+                bridge.sendMessageToWebView(BiomeMessageType.STATE_SYNC, it, responseData)
+            }
+        }
+
+        override fun onError(code: Int, message: String) {
+            apiInFlightRequests.remove(requestKey)
+            bridge.sendMessageToWebView(
+                BiomeMessageType.CRITICAL_FAILURE,
+                BiomeMessageAction.CRITICAL_FAILURE,
+                mapOf(
+                    "reason" to message,
+                    "retryable" to false,
+                    "endpoint" to (action.customEndpoint ?: APIBridge.compositeEndpoint),
+                    "route" to action.route,
+                    "method" to action.method
+                )
+            )
         }
     }
 
@@ -916,6 +968,8 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 runOnUiThread {
+                    if (networkWasLost) return@runOnUiThread
+                    networkWasLost = true
                     Log.w(TAG, "Network lost")
                     bridge.sendMessageToWebView(
                         BiomeMessageType.NETWORK_INTERRUPTION,
@@ -934,6 +988,8 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
             override fun onAvailable(network: Network) {
                 runOnUiThread {
+                    if (!networkWasLost) return@runOnUiThread
+                    networkWasLost = false
                     Log.d(TAG, "Network restored")
                     bridge.sendMessageToWebView(
                         BiomeMessageType.NETWORK_INTERRUPTION,

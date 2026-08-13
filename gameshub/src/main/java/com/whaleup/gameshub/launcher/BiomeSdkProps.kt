@@ -11,6 +11,7 @@ import com.whaleup.gameshub.data.SDKEvent
  */
 data class BiomeSdkProps(
     val userConfig: UserConfig,
+    val sessionId: String? = null,
     val onMessage: ((JsMessage) -> Unit)? = null,
     val onWhaleupSDKError: ((SDKError) -> Unit)? = null,
     val onWhaleupSDKEvent: ((SDKEvent) -> Unit)? = null,

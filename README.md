@@ -135,13 +135,14 @@ val props = BiomeSdkProps(
         userId = "user_123",
         sessionId = "host_session_123",
         apiBaseUrl = "https://api.yourdomain.com",
+        userAgent = "MyApp/Android",
         timezone = "Asia/Kolkata",
         authToken = "your_auth_token",
         name = "John Doe",
         avatar = "https://example.com/avatar.png",
-        compositeEndpoint = "/api/composite",
         allowedDomains = listOf("https://*.dev/", "https://whaleupco.in/games/*")
     ),
+    sessionId = "optional_top_level_override",
     onWhaleupSDKEvent = { event ->
         Log.d("GamesHub", "Event: ${event.type} / ${event.action}")
     },
@@ -168,6 +169,7 @@ GamesHubLauncher.open(context, props)
 | Property         | Type                           | Required | Default  | Description |
 |------------------|--------------------------------|----------|----------|-------------|
 | `userConfig`     | `UserConfig`                   | ✅ Yes   | —        | User identity and API configuration |
+| `sessionId`      | `String?`                      | No       | `null`   | Top-level override for `UserConfig.sessionId` |
 | `onMessage`      | `((JsMessage) -> Unit)?`       | No       | `null`   | Raw WebView messages forwarded to the host |
 | `onWhaleupSDKError` | `((SDKError) -> Unit)?`     | No       | `null`   | SDK error events (load failures, JS errors, etc.) |
 | `onWhaleupSDKEvent` | `((SDKEvent) -> Unit)?`     | No       | `null`   | SDK lifecycle events (coins earned, game exited, etc.) |
@@ -187,12 +189,11 @@ GamesHubLauncher.open(context, props)
 | `userId`             | `String`        | ✅ Yes   | Unique identifier for the current user |
 | `sessionId`          | `String`        | ✅ Yes   | Unique session identifier for the host application session |
 | `apiBaseUrl`         | `String`        | ✅ Yes   | Base URL of the backend API (e.g. `https://api.example.com`) |
-| `timezone`           | `String`        | ✅ Yes   | Timezone for day reset / events (e.g. `Asia/Kolkata`) |
+| `userAgent`          | `String`        | ✅ Yes   | Custom user-agent string sent with SDK requests |
+| `timezone`           | `String?`       | No       | Optional IANA timezone sent with SDK requests |
 | `authToken`          | `String?`       | No       | Bearer token for authenticated API calls |
 | `name`               | `String?`       | No       | Display name shown in the hub |
 | `avatar`             | `String?`       | No       | URL of the user's avatar image |
-| `compositeEndpoint`  | `String?`       | No       | Path for the composite API route (e.g. `/api/composite`) |
-| `userAgent`          | `String?`       | No       | Custom User-Agent string injected into the WebView |
 | `allowedDomains`     | `List<String>`  | ✅ Yes   | Navigation allowlist; an empty list blocks remote URLs |
 
 ---
@@ -476,7 +477,7 @@ All network calls are routed through `APIBridge` using `HubEndpoint`.
 | `GET_GULLAK`          | `/api/composite`  | `gullak/get-gullak`       | Fetch reward piggy-bank (Gullak) data |
 | `CLAIM_GULLAK`        | `/api/composite`  | `gullak/claim-gullak`     | Claim accumulated Gullak rewards |
 
-The `apiBaseUrl` and `compositeEndpoint` in `UserConfig` control where these requests are sent.
+`apiBaseUrl` controls the API host. A `gameApiRequest` message may optionally provide its own composite `endpoint`; otherwise the standard composite path is used.
 
 ---
 
