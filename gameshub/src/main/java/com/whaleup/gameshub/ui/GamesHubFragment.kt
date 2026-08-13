@@ -147,7 +147,15 @@ class GamesHubFragment : Fragment() {
         // 2. Setup Banner ViewPager2
         val vpBanner = view.findViewById<ViewPager2>(R.id.vpBannerPager)
         bannerAdapter = BannerAdapter(emptyList()) { url, index ->
-            // Banner click handler
+            val userId = GamesHubSession.props?.userConfig?.userId
+                ?: BiomeState.getUserConfig()?.userId
+                ?: return@BannerAdapter
+            APIBridge.videoWatched(userId, object : APICallback {
+                override fun onSuccess(response: String) = Unit
+                override fun onError(code: Int, message: String) {
+                    Log.w("GamesHubFragment", "Failed to record video watch: $message")
+                }
+            })
         }
         vpBanner.adapter = bannerAdapter
 

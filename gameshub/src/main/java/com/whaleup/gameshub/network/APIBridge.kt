@@ -112,7 +112,13 @@ object APIBridge {
 
                 val isSuccess = response.optBoolean("success", response.optBoolean("isSuccess", response.has("data")))
                 if (!isSuccess) {
-                    val errorMsg = response.optString("error", response.optString("message", "Composite API request failed"))
+                    val errorData = response.optJSONObject("data")
+                    val errorObject = response.optJSONObject("error")
+                    val errorMsg = errorData?.optString("errorMessage")?.takeIf { it.isNotBlank() }
+                        ?: errorObject?.optString("message")?.takeIf { it.isNotBlank() }
+                        ?: response.optString("error").takeIf { it.isNotBlank() }
+                        ?: response.optString("message").takeIf { it.isNotBlank() }
+                        ?: "Composite API request failed"
                     Log.e(TAG, "Composite request unsuccessful: $errorMsg")
                     mainHandler.post { callback.onError(-1, errorMsg) }
                     return@execute
@@ -203,13 +209,49 @@ object APIBridge {
         compositeRequest("GET", HubEndpoint.GET_CONFIG, emptyMap(), callback)
     }
 
+    fun getGullak(userId: String, callback: APICallback) {
+        withRequiredUserId(userId, "get Gullak", callback) { payload ->
+            compositeRequest("GET", HubEndpoint.GET_GULLAK, payload, callback)
+        }
+    }
+
     fun claimGullak(userId: String, callback: APICallback) {
-        if (userId.isBlank()) {
-            mainHandler.post { callback.onError(400, "Cannot claim reward without a userId") }
+        withRequiredUserId(userId, "claim reward", callback) { payload ->
+            compositeRequest("POST", HubEndpoint.CLAIM_GULLAK, payload, callback)
+        }
+    }
+
+    fun videoWatched(userId: String, callback: APICallback) {
+        withRequiredUserId(userId, "record video watch", callback) { payload ->
+            compositeRequest("POST", HubEndpoint.VIDEO_WATCHED, payload, callback)
+        }
+    }
+
+    fun logClientError(data: Map<String, Any?>, callback: APICallback) {
+        val message = data["errorMessage"]?.toString()?.trim().orEmpty()
+        if (message.isEmpty()) {
+            mainHandler.post { callback.onError(400, "Cannot log client error without errorMessage") }
             return
         }
-        val payload = mapOf("userId" to userId)
-        compositeRequest("POST", HubEndpoint.CLAIM_GULLAK, payload, callback)
+        compositeRequest("POST", HubEndpoint.LOG_CLIENT_ERROR, data, callback)
+    }
+
+    fun getStrings(callback: APICallback) {
+        compositeRequest("GET", HubEndpoint.GET_STRINGS, emptyMap(), callback)
+    }
+
+    private fun withRequiredUserId(
+        userId: String,
+        action: String,
+        callback: APICallback,
+        block: (Map<String, Any?>) -> Unit
+    ) {
+        val normalized = userId.trim()
+        if (normalized.isEmpty()) {
+            mainHandler.post { callback.onError(400, "Cannot $action without a userId") }
+            return
+        }
+        block(mapOf("userId" to normalized))
     }
 
     suspend fun getMultiplayerTicketSuspend(playerId: String, engineUrl: String): String {

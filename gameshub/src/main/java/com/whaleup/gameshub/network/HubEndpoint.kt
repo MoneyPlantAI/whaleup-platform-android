@@ -20,14 +20,24 @@ enum class HubEndpoint(val path: String, val routeUri: String) {
     GET_LEADERBOARD("/api/1/whaleup/games", "game/get-leaderboard"),
 
     // Gullak / Rewards
-    CLAIM_GULLAK("/api/1/whaleup/games", "gullak/claim-gullak");
+    GET_GULLAK("/api/1/whaleup/games", "gullak/get-gullak"),
+    CLAIM_GULLAK("/api/1/whaleup/games", "gullak/claim-gullak"),
+
+    // Engagement / diagnostics / localisation
+    VIDEO_WATCHED("/api/1/whaleup/games", "video/video-watched"),
+    LOG_CLIENT_ERROR("/api/1/whaleup/games", "log/client-error"),
+    GET_STRINGS("/api/1/whaleup/games", "config/get-strings");
 
     companion object {
         /**
          * Find an endpoint by its name string (used by MessageRouter).
          */
         fun fromName(name: String): HubEndpoint? {
-            return entries.find { it.name == name }
+            val normalized = name.replace("_", "").replace("-", "").lowercase()
+            return entries.find {
+                it.name.replace("_", "").lowercase() == normalized ||
+                    it.routeUri == name
+            }
         }
     }
 }

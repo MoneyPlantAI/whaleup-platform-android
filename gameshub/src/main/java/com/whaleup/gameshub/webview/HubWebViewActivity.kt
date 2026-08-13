@@ -666,6 +666,16 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                 requestData["userId"] as? String ?: "",
                 callback
             )
+            HubEndpoint.GET_GULLAK -> APIBridge.getGullak(
+                requestData["userId"] as? String ?: "",
+                callback
+            )
+            HubEndpoint.VIDEO_WATCHED -> APIBridge.videoWatched(
+                requestData["userId"] as? String ?: "",
+                callback
+            )
+            HubEndpoint.LOG_CLIENT_ERROR -> APIBridge.logClientError(requestData, callback)
+            HubEndpoint.GET_STRINGS -> APIBridge.getStrings(callback)
             HubEndpoint.GET_CONFIG -> APIBridge.getConfig(callback)
             HubEndpoint.CATALOG -> APIBridge.get(endpoint, callback)
             HubEndpoint.GET_LEADERBOARD -> APIBridge.getLeaderboard(requestData, callback)
@@ -715,6 +725,12 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                     )
                 }
             }
+            HubEndpoint.GET_GULLAK, HubEndpoint.CLAIM_GULLAK -> {
+                BiomeState.updateGullakProfile(response.toMap())
+            }
+            HubEndpoint.VIDEO_WATCHED,
+            HubEndpoint.LOG_CLIENT_ERROR,
+            HubEndpoint.GET_STRINGS -> Unit
             else -> { /* no post-processing needed */ }
         }
     }
