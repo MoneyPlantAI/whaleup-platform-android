@@ -129,4 +129,14 @@ class LeaderboardAdapter(
         items = newItems
         notifyDataSetChanged()
     }
+
+    fun appendData(newItems: List<LeaderboardItemData>) {
+        if (newItems.isEmpty()) return
+        val existingRanks = items.mapTo(mutableSetOf()) { it.ranking }
+        val uniqueItems = newItems.filter { existingRanks.add(it.ranking) }
+        if (uniqueItems.isEmpty()) return
+        val start = items.size
+        items = items + uniqueItems
+        notifyItemRangeInserted(start, uniqueItems.size)
+    }
 }

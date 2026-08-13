@@ -23,7 +23,7 @@ private const val TAG = "APIBridge"
  *
  * Features:
  * - Composite API envelope/unwrap (POST to single endpoint, routes inside payload)
- * - Linear backoff retry (2 retries, 10s initial, 5s increment, 30s max)
+ * - Exponential backoff retry (2 retries at 10s and 20s)
  * - Auth token and user-agent injection
  * - Error handler callback for host notification
  */
@@ -61,6 +61,7 @@ object APIBridge {
         authToken = null
         userAgent = null
         timezone = null
+        recordSuccess()
     }
 
     private fun String.isUsableSessionId(): Boolean =
@@ -76,8 +77,14 @@ object APIBridge {
     // Retry configuration matching defaults
     private var maxRetries = 2
     private var initialDelayMs = 10_000L
-    private var delayIncrementMs = 5_000L
     private var maxDelayMs = 30_000L
+
+    private const val CIRCUIT_FAILURE_THRESHOLD = 5
+    private const val CIRCUIT_RESET_TIMEOUT_MS = 60_000L
+    private val circuitLock = Any()
+    private var consecutiveFailures = 0
+    private var lastFailureTime = 0L
+    private var circuitOpen = false
 
     private val executor = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -117,8 +124,7 @@ object APIBridge {
 
                 Log.d(TAG, "Full composite response for ${endpoint.routeUri}: $result")
 
-                val isSuccess = response.optBoolean("success", response.optBoolean("isSuccess", response.has("data")))
-                if (!isSuccess) {
+                if (!response.has("success") || response.opt("success") !is Boolean || !response.getBoolean("success")) {
                     val errorData = response.optJSONObject("data")
                     val errorObject = response.optJSONObject("error")
                     val errorMsg = errorData?.optString("errorMessage")?.takeIf { it.isNotBlank() }
@@ -131,18 +137,15 @@ object APIBridge {
                     return@execute
                 }
 
-                val responseData = response.optJSONObject("data") ?: response.optJSONObject("body") ?: response
-                Log.d(TAG, "Extracted data for ${endpoint.routeUri}: $responseData")
-                mainHandler.post { callback.onSuccess(responseData.toString()) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Composite request failed for ${endpoint.routeUri}", e)
-                if (endpoint == HubEndpoint.GAME_ENDED && e.message?.contains("HTTP 409") == true) {
-                    Log.i(TAG, "Treating HTTP 409 for GAME_ENDED as success")
-                    mainHandler.post {
-                        callback.onSuccess("{\"success\":true}")
-                    }
+                if (!response.has("data") || response.isNull("data")) {
+                    mainHandler.post { callback.onError(-1, "Composite API returned success but no data") }
                     return@execute
                 }
+                val responseData = response.get("data")
+                Log.d(TAG, "Extracted data for ${endpoint.routeUri}: $responseData")
+                mainHandler.post { callback.onSuccess(serializeJsonValue(responseData)) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Composite request failed for ${endpoint.routeUri}", e)
                 val apiError = APIError(
                     message = e.message ?: "Unknown error",
                     endpoint = endpoint.routeUri,
@@ -182,27 +185,17 @@ object APIBridge {
                     "route: $route"
                 )
                 val response = JSONObject(result)
-                val isSuccess = response.optBoolean(
-                    "success",
-                    response.optBoolean("isSuccess", response.has("data"))
-                )
-                if (!isSuccess) {
+                if (!response.has("success") || response.opt("success") !is Boolean || !response.getBoolean("success")) {
                     val message = response.optJSONObject("data")?.optString("errorMessage")
                         ?.takeIf { it.isNotBlank() }
                         ?: response.optString("error").takeIf { it.isNotBlank() }
                         ?: "Composite API request failed"
                     throw IllegalStateException(message)
                 }
-                val responseData = response.opt("data").takeUnless { it == null || it == JSONObject.NULL }
-                    ?: response.opt("body").takeUnless { it == null || it == JSONObject.NULL }
-                    ?: response
-                val serializedResponse = when (responseData) {
-                    is JSONObject, is org.json.JSONArray -> responseData.toString()
-                    is String -> JSONObject.quote(responseData)
-                    is Number, is Boolean -> responseData.toString()
-                    else -> "null"
+                if (!response.has("data") || response.isNull("data")) {
+                    throw IllegalStateException("Composite API returned success but no data")
                 }
-                mainHandler.post { callback.onSuccess(serializedResponse) }
+                mainHandler.post { callback.onSuccess(serializeJsonValue(response.get("data"))) }
             } catch (error: Exception) {
                 mainHandler.post { callback.onError(-1, error.message ?: "Unknown error") }
             }
@@ -353,7 +346,7 @@ object APIBridge {
     // endregion
 
     /**
-     * Execute HTTP request with linear backoff retry.
+     * Execute HTTP request with exponential backoff retry.
      * Runs on background thread — DO NOT call from main thread.
      */
     private fun executeWithRetry(
@@ -367,12 +360,11 @@ object APIBridge {
         if (baseUrl.isEmpty()) {
             throw IllegalStateException("[APIBridge] Base URL not set. Please provide apiBaseUrl in UserConfig.")
         }
-        if (!isNetworkAvailable()) {
-            throw NetworkUnavailableException()
-        }
+        checkCircuit()
 
         var connection: HttpURLConnection? = null
         try {
+            if (!isNetworkAvailable()) throw NetworkUnavailableException()
             val url = URL("$baseUrl$path")
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = method
@@ -414,6 +406,7 @@ object APIBridge {
                 val reader = BufferedReader(InputStreamReader(connection.inputStream, "UTF-8"))
                 val result = reader.use { it.readText() }
                 Log.d(TAG, "$method $path SUCCESS - Response: $result")
+                recordSuccess()
                 return result
             } else {
                 val errorStream = connection.errorStream
@@ -425,28 +418,19 @@ object APIBridge {
                 val finalErrorMsg = if (errorBody.isNotEmpty()) "HTTP $responseCode: $errorBody" else "HTTP $responseCode: ${connection.responseMessage}"
                 val logPrefix = if (context != null) "APIBridge ($context)" else "APIBridge"
                 Log.e(TAG, "$logPrefix - Error Response Body ($responseCode) for $baseUrl$path: $errorBody")
-                if (responseCode in 400..499 && responseCode != 408 && responseCode != 429) {
-                    throw NonRetryableException(finalErrorMsg)
-                } else {
-                    throw Exception(finalErrorMsg)
-                }
+                throw Exception(finalErrorMsg)
             }
         } catch (e: Exception) {
-            if (e is NonRetryableException || e is NetworkUnavailableException) {
-                throw e
-            }
-            if (!isNetworkAvailable()) {
-                throw NetworkUnavailableException()
-            }
             val isLastAttempt = attempt >= maxRetries
 
             if (isLastAttempt) {
+                recordFailure()
                 Log.e(TAG, "$method $path - Failed after ${attempt + 1} attempts", e)
                 throw e
             }
 
             // Calculate backoff delay
-            val delay = minOf(initialDelayMs + attempt * delayIncrementMs, maxDelayMs)
+            val delay = minOf(initialDelayMs * (1L shl attempt), maxDelayMs)
             val urlString = baseUrl + path
             val contextInfo = if (context != null) "($context) " else ""
             Log.w(TAG, "$method $urlString ${contextInfo}- Attempt ${attempt + 1} failed, retrying in ${delay}ms: ${e.message}")
@@ -458,6 +442,39 @@ object APIBridge {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    private fun serializeJsonValue(value: Any): String = when (value) {
+        is JSONObject, is org.json.JSONArray -> value.toString()
+        is String -> JSONObject.quote(value)
+        is Number, is Boolean -> value.toString()
+        else -> throw IllegalStateException("Composite API returned unsupported data")
+    }
+
+    private fun checkCircuit() = synchronized(circuitLock) {
+        if (!circuitOpen) return@synchronized
+        if (System.currentTimeMillis() - lastFailureTime > CIRCUIT_RESET_TIMEOUT_MS) {
+            circuitOpen = false
+            Log.i(TAG, "Circuit breaker entering HALF-OPEN state")
+        } else {
+            throw IllegalStateException("Circuit Breaker Open: Too many recent failures. Please try again later.")
+        }
+    }
+
+    private fun recordFailure() = synchronized(circuitLock) {
+        consecutiveFailures += 1
+        lastFailureTime = System.currentTimeMillis()
+        if (consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+            circuitOpen = true
+            Log.e(TAG, "Circuit breaker opened after $consecutiveFailures failed requests")
+        }
+    }
+
+    private fun recordSuccess() = synchronized(circuitLock) {
+        if (consecutiveFailures > 0 || circuitOpen) Log.i(TAG, "Circuit breaker reset to CLOSED")
+        consecutiveFailures = 0
+        lastFailureTime = 0L
+        circuitOpen = false
     }
 
     fun getLeaderboard(data: Map<String, Any?>? = null, callback: APICallback) {
@@ -475,7 +492,6 @@ object APIBridge {
     }
 }
 
-class NonRetryableException(message: String) : Exception(message)
 class NetworkUnavailableException : Exception("No internet connection")
 
 data class APIError(

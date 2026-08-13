@@ -3,6 +3,7 @@ package com.whaleup.gameshub.data
 import android.util.Log
 import com.whaleup.gameshub.launcher.BiomeSdkProps
 import com.whaleup.gameshub.network.APIBridge
+import com.whaleup.gameshub.ui.HubStrings
 
 /**
  * Global session holder for the Biome SDK.
@@ -67,6 +68,7 @@ object GamesHubSession {
         BiomeState.reset()
         APIBridge.resetSession()
         CatalogCache.clear()
+        HubStrings.reset()
         PlayerPrefsManager.clearUserId()
         _props = null
     }

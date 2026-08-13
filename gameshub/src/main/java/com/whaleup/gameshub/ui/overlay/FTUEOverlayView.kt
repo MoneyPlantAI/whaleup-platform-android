@@ -22,6 +22,7 @@ import com.whaleup.gameshub.data.HubSessionFlow
 import com.whaleup.gameshub.data.PlayerPrefsManager
 import com.whaleup.gameshub.data.SDKEvent
 import com.whaleup.gameshub.data.SessionEligibility
+import com.whaleup.gameshub.ui.HubStrings
 
 class FTUEOverlayView @JvmOverloads constructor(
     context: Context,
@@ -96,14 +97,14 @@ class FTUEOverlayView @JvmOverloads constructor(
                 if (isLast) {
                     vCtaBase.setBackgroundResource(R.drawable.bg_ftue_cta_base_final)
                     btnCtaFace.setBackgroundResource(R.drawable.bg_ftue_cta_face_final)
-                    tvCtaText.text = "Start Playing"
+                    tvCtaText.text = HubStrings.get("onboarding.startPlaying", "Start Playing")
                     tvCtaText.setTextColor(Color.parseColor("#6A3A05"))
                     tvCtaArrow.setTextColor(Color.parseColor("#6A3A05"))
                     btnSkip.visibility = View.INVISIBLE
                 } else {
                     vCtaBase.setBackgroundResource(R.drawable.bg_ftue_cta_base)
                     btnCtaFace.setBackgroundResource(R.drawable.bg_ftue_cta_face)
-                    tvCtaText.text = "Next"
+                    tvCtaText.text = HubStrings.get("onboarding.next", "Next")
                     tvCtaText.setTextColor(Color.WHITE)
                     tvCtaArrow.setTextColor(Color.WHITE)
                     btnSkip.visibility = View.VISIBLE
@@ -183,7 +184,8 @@ class FTUEOverlayView @JvmOverloads constructor(
         updateDotsIndicator(0)
         vCtaBase.setBackgroundResource(R.drawable.bg_ftue_cta_base)
         btnCtaFace.setBackgroundResource(R.drawable.bg_ftue_cta_face)
-        tvCtaText.text = "Next"
+        tvCtaText.text = HubStrings.get("onboarding.next", "Next")
+        btnSkip.text = HubStrings.get("onboarding.skip", "Skip")
         btnSkip.visibility = View.VISIBLE
         bringToFront()
         visibility = View.VISIBLE

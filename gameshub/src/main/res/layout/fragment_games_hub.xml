@@ -104,6 +104,7 @@
                 android:orientation="vertical">
 
                 <TextView
+                    android:id="@+id/tvLeaderboardTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Leaderboard"
@@ -112,6 +113,7 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/tvLeaderboardSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
@@ -121,6 +123,7 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/tvLeaderboardBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="end|center_vertical"

@@ -10,6 +10,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeState
+import com.whaleup.gameshub.ui.HubStrings
 import com.whaleup.gameshub.util.ImageLoader
 
 class GameWinOverlayView @JvmOverloads constructor(
@@ -48,11 +49,14 @@ class GameWinOverlayView @JvmOverloads constructor(
     }
 
     fun show(gameName: String, coinsEarned: Int) {
-        currentGameName = gameName.ifBlank { "game" }
+        currentGameName = gameName.ifBlank { HubStrings.get("gameWin.fallbackGameName", "game") }
         currentCoinsEarned = Math.max(0, coinsEarned)
 
         tvCoinAmount.text = currentCoinsEarned.toString()
-        tvSubtitle.text = "Yayy, you earned for playing $currentGameName!"
+        tvSubtitle.text = HubStrings.get(
+            "gameWin.subtitle",
+            "Yayy, you earned for playing {gameName}!"
+        ).replace("{gameName}", currentGameName)
 
         val bonusConfig = BiomeState.getBonusConfig()
         val treasureUrl = bonusConfig?.images?.treasureBox?.takeIf { it.isNotBlank() }

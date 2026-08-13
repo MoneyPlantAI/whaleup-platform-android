@@ -15,7 +15,10 @@ import com.whaleup.gameshub.data.PlayerPrefsManager
 import com.whaleup.gameshub.data.SessionEligibility
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
+import com.whaleup.gameshub.messaging.toMap
+import com.whaleup.gameshub.ui.HubStrings
 import com.whaleup.gameshub.util.ImageLoader
+import org.json.JSONObject
 
 class DailyLoginOverlayView @JvmOverloads constructor(
     context: Context,
@@ -81,8 +84,8 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         // Set UI values matching RN DailyLoginOverlay.tsx
         tvDayText.text = "Day $displayDay"
         tvCoinAmount.text = loginCoins.toString()
-        tvTitle.text = "You earned"
-        tvCtaText.text = "Play & earn"
+        tvTitle.text = HubStrings.get("dailyLogin.youEarned", "You earned").trim()
+        tvCtaText.text = HubStrings.get("dailyLogin.ctaButton", "Play & earn")
         tvCtaArrow.visibility = View.VISIBLE
 
         // Load treasure box image (with CDN fallback)
@@ -105,9 +108,9 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         if (isClaiming) return
         isClaiming = true
         btnClaim.alpha = 0.65f
-        tvCtaText.text = "Claiming..."
+        tvCtaText.text = HubStrings.get("dailyLogin.claiming", "Claiming…")
         tvCtaArrow.visibility = View.GONE
-        tvTitle.text = "Claiming..."
+        tvTitle.text = HubStrings.get("dailyLogin.claiming", "Claiming…")
 
         val userId = BiomeState.getUserProfile()?.basic?.userId?.takeIf { it.isNotBlank() }
             ?: GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
@@ -121,11 +124,7 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         APIBridge.claimGullak(userId, object : APICallback {
             override fun onSuccess(response: String) {
                 saveClaimCompleted()
-                post {
-                    isClaiming = false
-                    btnClaim.alpha = 1.0f
-                    dismiss()
-                }
+                refreshProfileAfterClaim(userId)
             }
 
             override fun onError(code: Int, message: String) {
@@ -134,11 +133,40 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         })
     }
 
+    private fun refreshProfileAfterClaim(userId: String) {
+        APIBridge.getUserProfile(
+            mapOf(
+                "userId" to userId,
+                "returns" to "basic,login,gameStats,earnings,signUp,claimableRewards"
+            ),
+            object : APICallback {
+                override fun onSuccess(response: String) {
+                    runCatching {
+                        BiomeState.setUserProfile(JSONObject(response).toMap(), "server")
+                    }
+                    finishSuccessfulClaim()
+                }
+
+                override fun onError(code: Int, message: String) {
+                    finishSuccessfulClaim()
+                }
+            }
+        )
+    }
+
+    private fun finishSuccessfulClaim() {
+        post {
+            isClaiming = false
+            btnClaim.alpha = 1.0f
+            dismiss()
+        }
+    }
+
     private fun restoreClaimButton() {
         isClaiming = false
         btnClaim.alpha = 1.0f
-        tvTitle.text = "You earned"
-        tvCtaText.text = "Play & earn"
+        tvTitle.text = HubStrings.get("dailyLogin.youEarned", "You earned").trim()
+        tvCtaText.text = HubStrings.get("dailyLogin.ctaButton", "Play & earn")
         tvCtaArrow.visibility = View.VISIBLE
     }
 

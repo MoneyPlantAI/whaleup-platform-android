@@ -996,6 +996,16 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                         BiomeMessageAction.NETWORK_RESTORED,
                         mapOf("timestamp" to System.currentTimeMillis())
                     )
+                    reportSdkError(
+                        SDKError(
+                            type = BiomeMessageType.NETWORK_INTERRUPTION,
+                            action = BiomeMessageAction.NETWORK_RESTORED,
+                            data = mapOf(
+                                "timestamp" to System.currentTimeMillis(),
+                                "retryable" to false
+                            )
+                        )
+                    )
                 }
             }
         }

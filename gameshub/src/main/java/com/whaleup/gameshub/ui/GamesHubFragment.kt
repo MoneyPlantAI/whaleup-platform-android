@@ -68,6 +68,10 @@ class GamesHubFragment : Fragment() {
     private lateinit var gameCardAdapter: GameCardAdapter
     private lateinit var bannerAdapter: BannerAdapter
     private lateinit var leaderboardAdapter: LeaderboardAdapter
+    private var leaderboardPage = 0
+    private var leaderboardTotalPages = 1
+    private var isLeaderboardLoading = false
+    private val leaderboardPageSize = 10
 
     private var bannerHandler: Handler = Handler(Looper.getMainLooper())
     private var bannerRunnable: Runnable? = null
@@ -155,9 +159,20 @@ class GamesHubFragment : Fragment() {
 
         // 3. Setup Leaderboard List
         val rvLeaderboard = view.findViewById<RecyclerView>(R.id.rvLeaderboard)
-        rvLeaderboard.layoutManager = LinearLayoutManager(requireContext())
+        val leaderboardLayoutManager = LinearLayoutManager(requireContext())
+        rvLeaderboard.layoutManager = leaderboardLayoutManager
         leaderboardAdapter = LeaderboardAdapter(emptyList())
         rvLeaderboard.adapter = leaderboardAdapter
+        rvLeaderboard.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                if (dy <= 0 || isLeaderboardLoading || leaderboardPage >= leaderboardTotalPages) return
+                val lastVisible = leaderboardLayoutManager.findLastVisibleItemPosition()
+                if (lastVisible >= leaderboardAdapter.itemCount - 3) {
+                    fetchLeaderboardFromApi(page = leaderboardPage + 1)
+                }
+            }
+        })
 
         // 4. Setup Floating Bottom Navigation Bar
         val tabGames = view.findViewById<View>(R.id.tabGames)
@@ -169,7 +184,7 @@ class GamesHubFragment : Fragment() {
         updateTabState(view, "games", animate = false)
 
         // Fetch real API data for Leaderboard
-        fetchLeaderboardFromApi()
+        fetchLeaderboardFromApi(page = 1)
     }
 
     private fun switchTab(tab: String) {
@@ -181,7 +196,7 @@ class GamesHubFragment : Fragment() {
         view?.let { updateTabState(it, tab, animate = true) }
 
         if (tab == "leaderboard") {
-            fetchLeaderboardFromApi()
+            fetchLeaderboardFromApi(page = 1)
         }
     }
 
@@ -314,8 +329,10 @@ class GamesHubFragment : Fragment() {
         leaderboardAdapter.updateData(sampleItems)
     }
 
-    private fun fetchLeaderboardFromApi() {
-        APIBridge.getLeaderboard(mapOf("page" to 1, "limit" to 10), object : APICallback {
+    private fun fetchLeaderboardFromApi(page: Int) {
+        if (isLeaderboardLoading || (page > 1 && page > leaderboardTotalPages)) return
+        isLeaderboardLoading = true
+        APIBridge.getLeaderboard(mapOf("page" to page, "limit" to leaderboardPageSize), object : APICallback {
             override fun onSuccess(response: String) {
                 try {
                     val json = JSONObject(response)
@@ -324,8 +341,8 @@ class GamesHubFragment : Fragment() {
                         ?: json.optJSONObject("body")?.optJSONArray("items")
                         ?: json.optJSONObject("payload")?.optJSONArray("items")
 
-                    if (itemsArr != null && itemsArr.length() > 0) {
-                        val list = mutableListOf<LeaderboardItemData>()
+                    val list = mutableListOf<LeaderboardItemData>()
+                    if (itemsArr != null) {
                         for (i in 0 until itemsArr.length()) {
                             val obj = itemsArr.getJSONObject(i)
                             val userId = when {
@@ -348,17 +365,29 @@ class GamesHubFragment : Fragment() {
                                 )
                             )
                         }
-                        activity?.runOnUiThread {
-                            leaderboardAdapter.updateData(list)
-                        }
+                    }
+                    val pagination = json.optJSONObject("pagination")
+                    val resolvedPage = pagination?.optInt("page", page) ?: page
+                    val resolvedTotalPages = pagination?.optInt(
+                        "totalPages",
+                        if (list.size < leaderboardPageSize) resolvedPage else resolvedPage + 1
+                    ) ?: if (list.size < leaderboardPageSize) resolvedPage else resolvedPage + 1
+                    activity?.runOnUiThread {
+                        leaderboardPage = resolvedPage
+                        leaderboardTotalPages = maxOf(resolvedPage, resolvedTotalPages)
+                        if (page == 1) leaderboardAdapter.updateData(list)
+                        else leaderboardAdapter.appendData(list)
+                        isLeaderboardLoading = false
                     }
                 } catch (e: Exception) {
                     Log.w("GamesHubFragment", "Failed to parse leaderboard response", e)
+                    activity?.runOnUiThread { isLeaderboardLoading = false }
                 }
             }
 
             override fun onError(code: Int, message: String) {
                 Log.w("GamesHubFragment", "Leaderboard fetch error: $code $message")
+                activity?.runOnUiThread { isLeaderboardLoading = false }
             }
         })
     }
@@ -422,6 +451,18 @@ class GamesHubFragment : Fragment() {
         APIBridge.timezone = config.timezone
         APIBridge.setSessionId(BiomeState.getSessionId() ?: config.sessionId)
 
+        APIBridge.getStrings(object : APICallback {
+            override fun onSuccess(response: String) {
+                runCatching { HubStrings.merge(JSONObject(response)) }
+                    .onSuccess { activity?.runOnUiThread { applyRemoteStrings() } }
+                    .onFailure { Log.w("GamesHubFragment", "Failed to merge remote strings", it) }
+            }
+
+            override fun onError(code: Int, message: String) {
+                Log.w("GamesHubFragment", "Remote strings unavailable; using defaults: $message")
+            }
+        })
+
         APIBridge.getUserProfile(
             mapOf("userId" to config.userId, "userName" to config.name, "avatarUrl" to config.avatar),
             object : APICallback {
@@ -440,6 +481,17 @@ class GamesHubFragment : Fragment() {
                 }
             }
         )
+    }
+
+    private fun applyRemoteStrings() {
+        view?.findViewById<TextView>(R.id.tvLeaderboardTitle)?.text =
+            HubStrings.get("leaderboard.title", "Leaderboard")
+        view?.findViewById<TextView>(R.id.tvLeaderboardSubtitle)?.text =
+            HubStrings.get("leaderboard.subtitle", "Top players across WhaleUp")
+        view?.findViewById<TextView>(R.id.tvLeaderboardBadge)?.text =
+            HubStrings.get("leaderboard.badge", "🏆 Weekly")
+        view?.findViewById<TextView>(R.id.tvTabLeaderboardText)?.text =
+            HubStrings.get("leaderboard.title", "Leaderboard")
     }
 
     private fun loadCatalog() {
