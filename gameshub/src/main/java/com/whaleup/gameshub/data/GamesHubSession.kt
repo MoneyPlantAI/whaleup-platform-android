@@ -13,7 +13,7 @@ object GamesHubSession {
     var props: BiomeSdkProps?
         get() = _props
         set(value) {
-            _props = value?.let { props ->
+            val resolved = value?.let { props ->
                 if (props.userConfig.userId.isBlank()) {
                     val fallbackConfig = BiomeState.getUserConfig()
                     if (fallbackConfig != null) {
@@ -26,6 +26,12 @@ object GamesHubSession {
                 } else {
                     resolveSessionId(props)
                 }
+            }
+            _props = resolved
+            resolved?.userConfig?.let { config ->
+                PlayerPrefsManager.setUserId(config.userId)
+                BiomeState.setUserConfig(config)
+                BiomeState.hydrateUserProfile(config.userId)
             }
         }
 

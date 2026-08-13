@@ -102,44 +102,54 @@ object BiomeState {
         profileSource = source
 
         try {
+            val root = (profileData["userProfile"] as? Map<*, *>)
+                ?: (profileData["profile"] as? Map<*, *>)
+                ?: (profileData["user"] as? Map<*, *>)
+                ?: profileData
+            val basicData = root["basic"] as? Map<*, *> ?: root
+            val loginData = root["login"] as? Map<*, *> ?: root
+            val gameStatsData = root["gameStats"] as? Map<*, *> ?: root
+            val earningsData = root["earnings"] as? Map<*, *> ?: root
+            val rewardsData = root["claimableRewards"] as? Map<*, *> ?: root
             userProfile = UserProfile(
                 basic = UserProfileBasic(
-                    userId = profileData["userId"] as? String ?: profileData["id"] as? String,
-                    userName = profileData["userName"] as? String ?: profileData["name"] as? String,
-                    avatarUrl = profileData["avatarUrl"] as? String ?: profileData["avatar"] as? String,
-                    ftueCompleted = profileData["ftueCompleted"] as? Boolean
+                    userId = basicData["userId"] as? String ?: basicData["id"] as? String,
+                    userName = basicData["userName"] as? String ?: basicData["name"] as? String,
+                    avatarUrl = basicData["avatarUrl"] as? String ?: basicData["avatar"] as? String,
+                    ftueCompleted = basicData["ftueCompleted"] as? Boolean
                 ),
                 login = UserProfileLogin(
-                    lastLoggedInOn = profileData["lastLoggedInOn"] as? String,
-                    loginDay = (profileData["loginDay"] as? Number)?.toInt() ?: 1,
-                    loginStreak = (profileData["loginStreak"] as? Number)?.toInt() ?: 1,
-                    dailyLoginAwarded = profileData["dailyLoginAwarded"] as? Boolean ?: false,
-                    isFirstVisit = profileData["isFirstVisit"] as? Boolean ?: false,
-                    ftueRewardGiven = profileData["ftueRewardGiven"] as? Boolean ?: false
+                    lastLoggedInOn = loginData["lastLoggedInOn"] as? String,
+                    loginDay = (loginData["loginDay"] as? Number)?.toInt() ?: 1,
+                    loginStreak = (loginData["loginStreak"] as? Number)?.toInt() ?: 1,
+                    dailyLoginAwarded = loginData["dailyLoginAwarded"] as? Boolean ?: false,
+                    isFirstLoginToday = loginData["isFirstLoginToday"] as? Boolean ?: false,
+                    isFirstVisit = loginData["isFirstVisit"] as? Boolean ?: false,
+                    ftueRewardGiven = loginData["ftueRewardGiven"] as? Boolean ?: false
                 ),
                 gameStats = UserProfileGameStats(
-                    gamesPlayedToday = (profileData["gamesPlayedToday"] as? Number)?.toInt() ?: 0,
-                    gamesPlayedTotal = (profileData["gamesPlayedTotal"] as? Number)?.toInt() ?: 0,
-                    mostPlayedGame = profileData["mostPlayedGame"] as? String ?: "",
-                    mostPlayedGameCount = (profileData["mostPlayedGameCount"] as? Number)?.toInt() ?: 0,
-                    totalPlayTimeSec = (profileData["totalPlayTimeSec"] as? Number)?.toInt() ?: 0
+                    gamesPlayedToday = (gameStatsData["gamesPlayedToday"] as? Number)?.toInt() ?: 0,
+                    gamesPlayedTotal = (gameStatsData["gamesPlayedTotal"] as? Number)?.toInt() ?: 0,
+                    mostPlayedGame = gameStatsData["mostPlayedGame"] as? String ?: "",
+                    mostPlayedGameCount = (gameStatsData["mostPlayedGameCount"] as? Number)?.toInt() ?: 0,
+                    totalPlayTimeSec = (gameStatsData["totalPlayTimeSec"] as? Number)?.toInt() ?: 0
                 ),
                 earnings = UserProfileEarnings(
-                    gemsEarnedToday = (profileData["gemsEarnedToday"] as? Number)?.toInt() ?: 0,
-                    gemsEarnedTotal = (profileData["gemsEarnedTotal"] as? Number)?.toInt() ?: 0,
-                    coinsEarnedTotal = (profileData["coinsEarnedTotal"] as? Number)?.toInt() ?: 0,
-                    totalCoinsEarnedToday = (profileData["totalCoinsEarnedToday"] as? Number)?.toInt() ?: 0,
-                    currentGems = (profileData["currentGems"] as? Number)?.toInt() ?: 0
+                    gemsEarnedToday = (earningsData["gemsEarnedToday"] as? Number)?.toInt() ?: 0,
+                    gemsEarnedTotal = (earningsData["gemsEarnedTotal"] as? Number)?.toInt() ?: 0,
+                    coinsEarnedTotal = (earningsData["coinsEarnedTotal"] as? Number)?.toInt() ?: 0,
+                    totalCoinsEarnedToday = (earningsData["totalCoinsEarnedToday"] as? Number)?.toInt() ?: 0,
+                    currentGems = (earningsData["currentGems"] as? Number)?.toInt() ?: 0
                 ),
                 claimableRewards = UserProfileClaimableRewards(
-                    loginRewardCoinsForToday = (profileData["loginRewardCoinsForToday"] as? Number)?.toInt() ?: 0,
-                    perGameRewardCoinsForToday = (profileData["perGameRewardCoinsForToday"] as? Number)?.toInt() ?: 0,
-                    maxEarnableCoinForToday = (profileData["maxEarnableCoinForToday"] as? Number)?.toInt() ?: 0,
-                    claimableGameRewardCoins = (profileData["claimableGameRewardCoins"] as? Number)?.toInt() ?: 0,
-                    claimableLoginRewardCoins = (profileData["claimableLoginRewardCoins"] as? Number)?.toInt() ?: 0,
-                    claimableSignupRewardCoins = (profileData["claimableSignupRewardCoins"] as? Number)?.toInt() ?: 0,
-                    lockedLoginRewardCoins = (profileData["lockedLoginRewardCoins"] as? Number)?.toInt() ?: 0,
-                    lockedGameRewardCoins = (profileData["lockedGameRewardCoins"] as? Number)?.toInt() ?: 0
+                    loginRewardCoinsForToday = (rewardsData["loginRewardCoinsForToday"] as? Number)?.toInt() ?: 0,
+                    perGameRewardCoinsForToday = (rewardsData["perGameRewardCoinsForToday"] as? Number)?.toInt() ?: 0,
+                    maxEarnableCoinForToday = (rewardsData["maxEarnableCoinForToday"] as? Number)?.toInt() ?: 0,
+                    claimableGameRewardCoins = (rewardsData["claimableGameRewardCoins"] as? Number)?.toInt() ?: 0,
+                    claimableLoginRewardCoins = (rewardsData["claimableLoginRewardCoins"] as? Number)?.toInt() ?: 0,
+                    claimableSignupRewardCoins = (rewardsData["claimableSignupRewardCoins"] as? Number)?.toInt() ?: 0,
+                    lockedLoginRewardCoins = (rewardsData["lockedLoginRewardCoins"] as? Number)?.toInt() ?: 0,
+                    lockedGameRewardCoins = (rewardsData["lockedGameRewardCoins"] as? Number)?.toInt() ?: 0
                 )
             )
 
@@ -251,7 +261,8 @@ object BiomeState {
     fun setFtueCompleted(completed: Boolean) {
         userProfile?.let { profile ->
             userProfile = profile.copy(
-                basic = profile.basic.copy(ftueCompleted = completed)
+                basic = profile.basic.copy(ftueCompleted = completed),
+                login = profile.login.copy(isFirstVisit = !completed)
             )
             persistUserProfile()
         }
@@ -300,6 +311,12 @@ object BiomeState {
      */
     fun hydrateUserProfile(userId: String? = null) {
         try {
+            val currentUserId = userProfile?.basic?.userId
+            if (!currentUserId.isNullOrBlank() && !userId.isNullOrBlank() && currentUserId != userId) {
+                userProfile = null
+                profileSource = null
+                profileTimestamp = null
+            }
             val key = getStorageKey(userId)
             val json = prefs?.getString(key, null) ?: return
             val cached = JSONObject(json)
@@ -329,6 +346,7 @@ object BiomeState {
                     loginDay = login?.optInt("loginDay", 1) ?: 1,
                     loginStreak = login?.optInt("loginStreak", 1) ?: 1,
                     dailyLoginAwarded = login?.optBoolean("dailyLoginAwarded") ?: false,
+                    isFirstLoginToday = login?.optBoolean("isFirstLoginToday") ?: false,
                     isFirstVisit = login?.optBoolean("isFirstVisit") ?: false,
                     ftueRewardGiven = login?.optBoolean("ftueRewardGiven") ?: false
                 ),
@@ -387,6 +405,7 @@ object BiomeState {
                         put("loginDay", profile.login.loginDay)
                         put("loginStreak", profile.login.loginStreak)
                         put("dailyLoginAwarded", profile.login.dailyLoginAwarded)
+                        put("isFirstLoginToday", profile.login.isFirstLoginToday)
                         put("isFirstVisit", profile.login.isFirstVisit)
                         put("ftueRewardGiven", profile.login.ftueRewardGiven)
                     })
@@ -528,6 +547,7 @@ object BiomeState {
                 "loginDay" to profile.login.loginDay,
                 "loginStreak" to profile.login.loginStreak,
                 "dailyLoginAwarded" to profile.login.dailyLoginAwarded,
+                "isFirstLoginToday" to profile.login.isFirstLoginToday,
                 "isFirstVisit" to profile.login.isFirstVisit,
                 "ftueRewardGiven" to profile.login.ftueRewardGiven
             ),

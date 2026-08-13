@@ -479,9 +479,12 @@ class GamesHubFragment : Fragment() {
                     fireHubViewedEvent()
                     
                     // Check and show FTUE Overlay if eligible, otherwise check Daily Login Overlay
-                    val ftueShown = view?.findViewById<com.whaleup.gameshub.ui.overlay.FTUEOverlayView>(R.id.vFtueOverlay)?.showIfEligible() ?: false
+                    val ftueOverlay = view?.findViewById<com.whaleup.gameshub.ui.overlay.FTUEOverlayView>(R.id.vFtueOverlay)
+                    val dailyOverlay = view?.findViewById<com.whaleup.gameshub.ui.overlay.DailyLoginOverlayView>(R.id.vDailyLoginOverlay)
+                    ftueOverlay?.onComplete = { dailyOverlay?.showIfEligible() }
+                    val ftueShown = ftueOverlay?.showIfEligible() ?: false
                     if (!ftueShown) {
-                        view?.findViewById<com.whaleup.gameshub.ui.overlay.DailyLoginOverlayView>(R.id.vDailyLoginOverlay)?.showIfEligible()
+                        dailyOverlay?.showIfEligible()
                     }
 
                     GamesHubSession.props?.onMessage?.invoke(

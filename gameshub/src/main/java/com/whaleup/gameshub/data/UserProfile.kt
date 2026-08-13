@@ -25,6 +25,7 @@ data class UserProfileLogin(
     val loginDay: Int = 1,
     val loginStreak: Int = 1,
     val dailyLoginAwarded: Boolean = false,
+    val isFirstLoginToday: Boolean = false,
     val isFirstVisit: Boolean = false,
     val ftueRewardGiven: Boolean = false
 )

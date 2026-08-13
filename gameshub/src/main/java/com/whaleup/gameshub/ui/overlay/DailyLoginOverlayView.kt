@@ -1,7 +1,6 @@
 package com.whaleup.gameshub.ui.overlay
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -11,21 +10,18 @@ import android.widget.TextView
 import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeState
 import com.whaleup.gameshub.data.GamesHubSession
+import com.whaleup.gameshub.data.HubSessionFlow
+import com.whaleup.gameshub.data.PlayerPrefsManager
+import com.whaleup.gameshub.data.SessionEligibility
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.util.ImageLoader
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class DailyLoginOverlayView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
-
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("whaleup_player_prefs", Context.MODE_PRIVATE)
 
     private var flRoot: FrameLayout
     private var btnClose: FrameLayout
@@ -65,11 +61,7 @@ class DailyLoginOverlayView @JvmOverloads constructor(
     }
 
     fun showIfEligible(): Boolean {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        val lastLoginDate = prefs.getString("last_login_date", "")
-        val isCompleted = prefs.getBoolean("daily_login_completed", false)
-
-        if (today == lastLoginDate && isCompleted) {
+        if (SessionEligibility.currentFlow() != HubSessionFlow.DAILY_LOGIN) {
             return false
         }
 
@@ -151,11 +143,8 @@ class DailyLoginOverlayView @JvmOverloads constructor(
     }
 
     private fun saveClaimCompleted() {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-        prefs.edit()
-            .putBoolean("daily_login_completed", true)
-            .putString("last_login_date", today)
-            .apply()
+        PlayerPrefsManager.set("daily_login_completed", true)
+        PlayerPrefsManager.set("last_login_date", SessionEligibility.today())
     }
 
     fun dismiss() {

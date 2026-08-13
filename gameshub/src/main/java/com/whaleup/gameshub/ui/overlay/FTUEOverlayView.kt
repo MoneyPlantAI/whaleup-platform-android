@@ -18,13 +18,18 @@ import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeState
 import com.whaleup.gameshub.data.BiomeMessageType
 import com.whaleup.gameshub.data.GamesHubSession
+import com.whaleup.gameshub.data.HubSessionFlow
+import com.whaleup.gameshub.data.PlayerPrefsManager
 import com.whaleup.gameshub.data.SDKEvent
+import com.whaleup.gameshub.data.SessionEligibility
 
 class FTUEOverlayView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+
+    var onComplete: (() -> Unit)? = null
 
     private var flRoot: FrameLayout
     private var flTopBar: FrameLayout
@@ -165,9 +170,7 @@ class FTUEOverlayView @JvmOverloads constructor(
     }
 
     fun showIfEligible(): Boolean {
-        val prefs = context.getSharedPreferences("biome_player_prefs", Context.MODE_PRIVATE)
-        val completed = prefs.getBoolean(PREF_KEY_FTUE_COMPLETED, false)
-        if (!completed) {
+        if (SessionEligibility.currentFlow() == HubSessionFlow.FTUE) {
             show()
             return true
         }
@@ -188,8 +191,9 @@ class FTUEOverlayView @JvmOverloads constructor(
     }
 
     private fun completeFTUE() {
-        val prefs = context.getSharedPreferences("biome_player_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(PREF_KEY_FTUE_COMPLETED, true).apply()
+        PlayerPrefsManager.set(PREF_KEY_FTUE_COMPLETED, true)
+        PlayerPrefsManager.set("is_first_visit", false)
+        BiomeState.setFtueCompleted(true)
 
         // Fire analytics event
         val userId = GamesHubSession.props?.userConfig?.userId?.takeIf { it.isNotBlank() }
@@ -206,6 +210,7 @@ class FTUEOverlayView @JvmOverloads constructor(
         )
 
         dismiss()
+        onComplete?.invoke()
     }
 
     fun dismiss() {
