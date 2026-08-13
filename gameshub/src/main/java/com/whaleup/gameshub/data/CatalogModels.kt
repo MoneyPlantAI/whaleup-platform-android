@@ -118,7 +118,14 @@ data class HubCatalog(
 
             val bonusConfig = BonusConfig.fromJson(bonusObj)
 
-            return HubCatalog(games, categories, heroBannerUrls, bonusConfig)
+            val activeGames = games
+                .filter { it.isActive }
+                .sortedWith(
+                    compareBy<AppEntry> { it.displayOrder ?: Int.MAX_VALUE }
+                        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                )
+
+            return HubCatalog(activeGames, categories, heroBannerUrls, bonusConfig)
         }
     }
 }
@@ -132,6 +139,8 @@ data class AppEntry(
     val bannerImageUrl: String,
     val bgUrl: String,
     val logoUrl: String,
+    val isActive: Boolean = true,
+    val displayOrder: Int? = null,
     val pill: Map<String, Any?>?,
     val description: String? = null,
     val gameConfig: Map<String, Any?>
@@ -140,6 +149,29 @@ data class AppEntry(
         fun fromJson(json: JSONObject): AppEntry {
             val config = json.optJSONObject("gameConfig")?.toMap() ?: emptyMap()
             val configPill = (config["pill"] as? Map<*, *>)?.toStringKeyMap()
+
+            fun booleanValue(key: String, defaultValue: Boolean): Boolean {
+                val value = if (json.has(key) && !json.isNull(key)) json.opt(key) else config[key]
+                return when (value) {
+                    is Boolean -> value
+                    is Number -> value.toInt() != 0
+                    is String -> when (value.lowercase()) {
+                        "true", "1" -> true
+                        "false", "0" -> false
+                        else -> defaultValue
+                    }
+                    else -> defaultValue
+                }
+            }
+
+            fun intValue(key: String): Int? {
+                val value = if (json.has(key) && !json.isNull(key)) json.opt(key) else config[key]
+                return when (value) {
+                    is Number -> value.toInt()
+                    is String -> value.toIntOrNull()
+                    else -> null
+                }
+            }
 
             fun strIsValidUrl(str: String): Boolean =
                 str.startsWith("http://") || str.startsWith("https://")
@@ -166,6 +198,8 @@ data class AppEntry(
                 bgUrl = json.optString("bgUrl", config["bgUrl"]?.toString().orEmpty()),
                 logoUrl = getValidUrl("logoUrl", "iconUrl", "icon")
                     .ifEmpty { config["logoUrl"]?.toString().orEmpty() },
+                isActive = booleanValue("isActive", true),
+                displayOrder = intValue("displayOrder"),
                 pill = json.optJSONObject("pill")?.toMap() ?: configPill,
                 description = json.optString("description", ""),
                 gameConfig = config
