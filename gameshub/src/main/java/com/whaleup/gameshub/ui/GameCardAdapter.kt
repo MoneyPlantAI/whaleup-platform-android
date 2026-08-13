@@ -48,7 +48,8 @@ class GameCardAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val game = games[position]
 
-        val iconUrl = game.bannerImageUrl.ifEmpty { game.logoUrl.ifEmpty { game.bgUrl } }
+        // React Native GameCard renders only item.icon; no banner/logo/bg fallback.
+        val iconUrl = game.iconUrl
 
         holder.tvFallbackName.text = game.name
         if (iconUrl.isNotEmpty()) {

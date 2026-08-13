@@ -470,10 +470,9 @@ class GamesHubFragment : Fragment() {
                     catalogGames = catalog.games
                     gameCardAdapter.updateList(catalog.games)
 
-                    // Setup Banner: use heroBannerUrls if present, else fallback to game banner images
-                    var heroBanners = catalog.heroBannerUrls.filter { it.isNotBlank() }
-                    if (heroBanners.isEmpty()) {
-                        heroBanners = catalog.games.mapNotNull { it.bannerImageUrl.takeIf { u -> u.isNotBlank() } }
+                    // React Native Banner uses only valid bonus.heroBannerUrl entries.
+                    val heroBanners = catalog.heroBannerUrls.filter {
+                        it.startsWith("http://") || it.startsWith("https://")
                     }
 
                     val bannerContainer = view?.findViewById<View>(R.id.bannerContainer)

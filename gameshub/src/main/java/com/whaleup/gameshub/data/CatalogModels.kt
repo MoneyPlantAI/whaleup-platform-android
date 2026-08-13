@@ -100,12 +100,7 @@ data class HubCatalog(
 
             val bonusObj = targetJson.optJSONObject("bonus") ?: json.optJSONObject("bonus")
 
-            // Check JSONArray locations for hero banners
-            extractUrls(targetJson.optJSONArray("heroBannerUrls"))
-            extractUrls(targetJson.optJSONArray("heroBannerUrl"))
-            extractUrls(json.optJSONArray("heroBannerUrls"))
-            extractUrls(json.optJSONArray("heroBannerUrl"))
-
+            // Match React Native: top banners come only from bonus.heroBannerUrl.
             if (bonusObj != null) {
                 extractUrls(bonusObj.optJSONArray("heroBannerUrl"))
                 extractUrls(bonusObj.optJSONArray("heroBannerUrls"))
@@ -139,6 +134,7 @@ data class AppEntry(
     val bannerImageUrl: String,
     val bgUrl: String,
     val logoUrl: String,
+    val iconUrl: String,
     val isActive: Boolean = true,
     val displayOrder: Int? = null,
     val pill: Map<String, Any?>?,
@@ -198,6 +194,7 @@ data class AppEntry(
                 bgUrl = json.optString("bgUrl", config["bgUrl"]?.toString().orEmpty()),
                 logoUrl = getValidUrl("logoUrl", "iconUrl", "icon")
                     .ifEmpty { config["logoUrl"]?.toString().orEmpty() },
+                iconUrl = json.optString("icon", "").trim(),
                 isActive = booleanValue("isActive", true),
                 displayOrder = intValue("displayOrder"),
                 pill = json.optJSONObject("pill")?.toMap() ?: configPill,
