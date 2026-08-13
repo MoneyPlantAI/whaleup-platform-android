@@ -451,6 +451,11 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                     PlayerPrefsManager.migrateFromLocalStorage(action.prefs)
                 }
 
+                is RouteAction.UserLogout -> {
+                    GamesHubSession.logout()
+                    finish()
+                }
+
                 is RouteAction.ShareIntent -> {
                     handleShare(action.text, action.payload)
                 }

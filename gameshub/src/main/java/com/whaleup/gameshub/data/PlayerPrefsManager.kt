@@ -142,6 +142,7 @@ object PlayerPrefsManager {
         val prefix = "${PREFS_PREFIX}${userId}_"
         val editor = prefs?.edit() ?: return
         prefs?.all?.keys?.filter { it.startsWith(prefix) }?.forEach { editor.remove(it) }
+        editor.remove(migrationFlagKey())
         editor.apply()
         cache.clear()
     }

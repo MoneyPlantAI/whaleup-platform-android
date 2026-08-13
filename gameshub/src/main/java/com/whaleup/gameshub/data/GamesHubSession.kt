@@ -13,38 +13,37 @@ object GamesHubSession {
     var props: BiomeSdkProps?
         get() = _props
         set(value) {
-            val resolved = value?.let { props ->
+            val candidate = value?.let { props ->
                 if (props.userConfig.userId.isBlank()) {
                     val fallbackConfig = BiomeState.getUserConfig()
                     if (fallbackConfig != null) {
                         Log.w("GamesHubSession", "Replacing blank userId config with persisted config")
-                        resolveSessionId(props.copy(userConfig = fallbackConfig))
+                        props.copy(userConfig = fallbackConfig)
                     } else {
                         Log.w("GamesHubSession", "Ignoring props with blank userId and no persisted config")
                         _props
                     }
                 } else {
-                    resolveSessionId(props)
+                    props
                 }
             }
-            _props = resolved
-            resolved?.userConfig?.let { config ->
+            candidate?.userConfig?.let { config ->
                 PlayerPrefsManager.setUserId(config.userId)
-                BiomeState.setUserConfig(config)
+                val persistedSessionId = PlayerPrefsManager.get("sessionId") as? String
+                val resolvedSessionId = config.sessionId.takeIf { it.isUsableSessionId() }
+                    ?: persistedSessionId.takeIf { it.isUsableSessionId() }
+                    ?: java.util.UUID.randomUUID().toString()
+                val resolved = candidate.copy(
+                    userConfig = config.copy(sessionId = resolvedSessionId)
+                )
+                _props = resolved
+                BiomeState.setUserConfig(resolved.userConfig)
                 BiomeState.hydrateUserProfile(config.userId)
+                BiomeState.setSessionId(resolvedSessionId)
+                APIBridge.setSessionId(resolvedSessionId)
             }
+            if (candidate == null) _props = null
         }
-
-    fun resolveSessionId(props: BiomeSdkProps): BiomeSdkProps {
-        val config = props.userConfig
-        val resolvedSessionId = if (!config.sessionId.isUsableSessionId()) {
-            java.util.UUID.randomUUID().toString()
-        } else {
-            config.sessionId
-        }
-        val resolvedConfig = config.copy(sessionId = resolvedSessionId)
-        return props.copy(userConfig = resolvedConfig)
-    }
 
     private fun String?.isUsableSessionId(): Boolean =
         !isNullOrBlank() && this != "sessionId"
@@ -57,5 +56,15 @@ object GamesHubSession {
         BiomeState.init(context)
         PlayerPrefsManager.init(context)
         APIBridge.init(context)
+    }
+
+    /** Remove only the current user's persisted data and all SDK runtime state. */
+    fun logout() {
+        PlayerPrefsManager.deleteAll()
+        BiomeState.reset()
+        APIBridge.resetSession()
+        CatalogCache.clear()
+        PlayerPrefsManager.clearUserId()
+        _props = null
     }
 }

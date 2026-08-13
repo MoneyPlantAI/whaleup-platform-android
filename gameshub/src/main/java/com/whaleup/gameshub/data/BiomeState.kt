@@ -63,9 +63,6 @@ object BiomeState {
             prefs?.edit()?.remove(USER_CONFIG_KEY)?.apply()
         } else {
             persistUserConfig(config)
-            if (!sessionId.isUsableSessionId()) {
-                config.sessionId?.let { setSessionId(it) }
-            }
         }
     }
 
@@ -295,10 +292,11 @@ object BiomeState {
         val usableId = id?.takeIf { it.isUsableSessionId() }
         sessionId = usableId
         if (usableId != null) {
-            prefs?.edit()?.putString("sessionId", usableId)?.apply()
+            PlayerPrefsManager.set("sessionId", usableId)
         } else {
-            prefs?.edit()?.remove("sessionId")?.apply()
+            PlayerPrefsManager.delete("sessionId")
         }
+        prefs?.edit()?.remove("sessionId")?.apply() // remove legacy global value
     }
     fun getSessionId(): String? = sessionId
 
@@ -377,9 +375,6 @@ object BiomeState {
             )
             profileSource = "cache"
             profileTimestamp = cached.optLong("timestamp", System.currentTimeMillis())
-
-            // Also hydrate sessionId
-            sessionId = prefs?.getString("sessionId", null)?.takeIf { it.isUsableSessionId() }
 
             Log.d(TAG, "Profile hydrated from cache for user: $userId")
         } catch (e: Exception) {
@@ -497,11 +492,7 @@ object BiomeState {
                 name = json.optNullableString("name"),
                 avatar = json.optNullableString("avatar"),
                 allowedDomains = allowedDomains
-            ).also {
-                sessionId = it.sessionId?.takeIf { value -> value.isUsableSessionId() }
-                    ?: prefs?.getString("sessionId", null)?.takeIf { value -> value.isUsableSessionId() }
-                Log.d(TAG, "User config hydrated for user: ${it.userId}")
-            }
+            ).also { Log.d(TAG, "User config hydrated for user: ${it.userId}") }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to hydrate user config", e)
             null
@@ -584,6 +575,7 @@ object BiomeState {
      * Reset all state (e.g. on logout).
      */
     fun reset() {
+        prefs?.edit()?.remove(getStorageKey())?.apply()
         userConfig = null
         userProfile = null
         profileTimestamp = null
@@ -591,6 +583,7 @@ object BiomeState {
         currentGameId = null
         currentGameIsMaxGameBonusEarned = false
         sessionId = null
+        bonusConfig = null
         prefs?.edit()
             ?.remove(USER_CONFIG_KEY)
             ?.remove("sessionId")

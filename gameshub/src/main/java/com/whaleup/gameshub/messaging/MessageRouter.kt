@@ -784,6 +784,8 @@ object MessageRouter {
                 }
             }
 
+            BiomeMessageAction.USER_LOGGED_OUT -> listOf(RouteAction.UserLogout)
+
             else -> listOf(RouteAction.Ignore)
         }
     }

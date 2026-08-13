@@ -75,16 +75,10 @@ class GamesHubFragment : Fragment() {
 
     private var _props: BiomeSdkProps? = null
     var props: BiomeSdkProps?
-        get() = _props
+        get() = GamesHubSession.props ?: _props
         set(value) {
-            _props = value?.let { newProps ->
-                val resolvedProps = if (newProps.userConfig.userId.isBlank()) {
-                    BiomeState.getUserConfig()?.let { newProps.copy(userConfig = it) } ?: _props
-                } else {
-                    newProps
-                }
-                resolvedProps?.let { GamesHubSession.resolveSessionId(it) }
-            }
+            GamesHubSession.props = value
+            _props = GamesHubSession.props
         }
 
     override fun onCreateView(

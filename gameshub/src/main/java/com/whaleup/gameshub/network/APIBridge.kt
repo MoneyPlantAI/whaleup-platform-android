@@ -56,6 +56,12 @@ object APIBridge {
         Log.d(TAG, "Host Session ID ${if (usableId != null) "set" else "cleared"}")
     }
 
+    fun resetSession() {
+        sessionId = null
+        authToken = null
+        userAgent = null
+    }
+
     private fun String.isUsableSessionId(): Boolean =
         isNotBlank() && this != "sessionId"
     var compositeEndpoint: String = "/api/1/whaleup/games"

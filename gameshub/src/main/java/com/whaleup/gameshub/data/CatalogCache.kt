@@ -13,6 +13,8 @@ object CatalogCache {
 
     fun get(): HubCatalog? = catalog
 
+    fun clear() { catalog = null }
+
     fun findById(gameId: String): AppEntry? =
         catalog?.games?.firstOrNull { it.id == gameId }
 }

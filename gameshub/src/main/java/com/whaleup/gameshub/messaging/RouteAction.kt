@@ -66,6 +66,8 @@ sealed class RouteAction {
     /** Migrate player preferences from localStorage data */
     data class MigratePlayerPrefs(val prefs: Map<String, String>) : RouteAction()
 
+    object UserLogout : RouteAction()
+
     /** Trigger native share sheet */
     data class ShareIntent(
         val text: String,

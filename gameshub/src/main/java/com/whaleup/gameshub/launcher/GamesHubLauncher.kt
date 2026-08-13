@@ -9,6 +9,10 @@ import com.whaleup.gameshub.ui.GamesHubFragment
 
 object GamesHubLauncher {
 
+    fun logout() {
+        GamesHubSession.logout()
+    }
+
     fun open(context: Context, props: BiomeSdkProps) {
         GamesHubSession.initialize(context)
         GamesHubSession.props = props
