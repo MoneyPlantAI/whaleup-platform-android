@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.whaleup.gameshub.messaging.toMap
+import com.whaleup.gameshub.util.ClientErrorReporter
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -29,6 +30,7 @@ private const val TAG = "APIBridge"
  */
 object APIBridge {
     private var appContext: Context? = null
+    internal val applicationContext: Context? get() = appContext
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -48,16 +50,16 @@ object APIBridge {
 
     var userAgent: String? = null
 
-    private var sessionId: String? = null
+    private var userSessionId: String? = null
 
     fun setSessionId(id: String?) {
         val usableId = id?.takeIf { it.isUsableSessionId() }
-        sessionId = usableId
+        userSessionId = usableId
         Log.d(TAG, "Host Session ID ${if (usableId != null) "set" else "cleared"}")
     }
 
     fun resetSession() {
-        sessionId = null
+        userSessionId = null
         authToken = null
         userAgent = null
         timezone = null
@@ -133,12 +135,16 @@ object APIBridge {
                         ?: response.optString("message").takeIf { it.isNotBlank() }
                         ?: "Composite API request failed"
                     Log.e(TAG, "Composite request unsuccessful: $errorMsg")
+                    val apiError = APIError(errorMsg, endpoint = endpoint.routeUri, method = method)
+                    notifyFailure(apiError)
                     mainHandler.post { callback.onError(-1, errorMsg) }
                     return@execute
                 }
 
                 if (!response.has("data") || response.isNull("data")) {
-                    mainHandler.post { callback.onError(-1, "Composite API returned success but no data") }
+                    val message = "Composite API returned success but no data"
+                    notifyFailure(APIError(message, endpoint = endpoint.routeUri, method = method))
+                    mainHandler.post { callback.onError(-1, message) }
                     return@execute
                 }
                 val responseData = response.get("data")
@@ -152,7 +158,7 @@ object APIBridge {
                     method = method
                 )
                 mainHandler.post {
-                    onError?.invoke(apiError)
+                    notifyFailure(apiError)
                     callback.onError(-1, e.message ?: "Unknown error")
                 }
             }
@@ -197,6 +203,7 @@ object APIBridge {
                 }
                 mainHandler.post { callback.onSuccess(serializeJsonValue(response.get("data"))) }
             } catch (error: Exception) {
+                notifyFailure(APIError(error.message ?: "Unknown error", endpoint = route, method = method))
                 mainHandler.post { callback.onError(-1, error.message ?: "Unknown error") }
             }
         }
@@ -211,6 +218,7 @@ object APIBridge {
                 val result = executeWithRetry("GET", endpoint.path, null, 0)
                 mainHandler.post { callback.onSuccess(result) }
             } catch (e: Exception) {
+                notifyFailure(APIError(e.message ?: "Unknown error", endpoint = endpoint.routeUri, method = "GET"))
                 mainHandler.post { callback.onError(-1, e.message ?: "Unknown Error") }
             }
         }
@@ -225,6 +233,7 @@ object APIBridge {
                 val result = executeWithRetry("POST", endpoint.path, body, 0)
                 mainHandler.post { callback.onSuccess(result) }
             } catch (e: Exception) {
+                notifyFailure(APIError(e.message ?: "Unknown error", endpoint = endpoint.routeUri, method = "POST"))
                 mainHandler.post { callback.onError(-1, e.message ?: "Unknown Error") }
             }
         }
@@ -382,7 +391,7 @@ object APIBridge {
             gameModeType?.let {
                 connection.setRequestProperty("X-GAME-MODE-TYPE", it)
             }
-            sessionId?.let { connection.setRequestProperty("sessionId", it) }
+            userSessionId?.let { connection.setRequestProperty("sessionId", it) }
             // Print all request headers
 //            Log.d(TAG, "===== REQUEST HEADERS =====")
 //            connection.requestProperties.forEach { (key, values) ->
@@ -475,6 +484,11 @@ object APIBridge {
         consecutiveFailures = 0
         lastFailureTime = 0L
         circuitOpen = false
+    }
+
+    private fun notifyFailure(error: APIError) {
+        mainHandler.post { onError?.invoke(error) }
+        ClientErrorReporter.reportApi(error)
     }
 
     fun getLeaderboard(data: Map<String, Any?>? = null, callback: APICallback) {

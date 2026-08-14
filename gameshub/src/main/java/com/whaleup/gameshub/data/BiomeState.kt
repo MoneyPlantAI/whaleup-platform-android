@@ -17,7 +17,7 @@ private const val USER_CONFIG_KEY = "user_config"
  *
  * Manages:
  * - User profile (with persistence via SharedPreferences)
- * - Current game context (gameId, sessionId)
+ * - Current game context (gameId, gameSessionId)
  * - Coin/gem tracking with optimistic updates
  * - Profile hydration from cache on startup
  */
@@ -31,7 +31,10 @@ object BiomeState {
 
     private var currentGameId: String? = null
     private var currentGameIsMaxGameBonusEarned: Boolean = false
+    // Host/user session used by APIBridge as the request-header session.
     private var sessionId: String? = null
+    // Per-game session returned by game-start and sent only in game-end payloads.
+    private var gameSessionId: String? = null
     private var bonusConfig: BonusConfig? = null
 
     fun getBonusConfig(): BonusConfig? = bonusConfig
@@ -299,6 +302,12 @@ object BiomeState {
         prefs?.edit()?.remove("sessionId")?.apply() // remove legacy global value
     }
     fun getSessionId(): String? = sessionId
+
+    fun setGameSessionId(id: String?) {
+        gameSessionId = id?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    fun getGameSessionId(): String? = gameSessionId
 
     // endregion
 
@@ -581,6 +590,7 @@ object BiomeState {
         currentGameId = null
         currentGameIsMaxGameBonusEarned = false
         sessionId = null
+        gameSessionId = null
         bonusConfig = null
         prefs?.edit()
             ?.remove(USER_CONFIG_KEY)

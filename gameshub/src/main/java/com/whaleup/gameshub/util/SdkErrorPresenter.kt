@@ -39,6 +39,7 @@ object SdkErrorPresenter {
     private var activeDialog: AlertDialog? = null
 
     fun report(context: Context?, error: SDKError) {
+        ClientErrorReporter.reportSdk(error)
         GamesHubSession.props?.onWhaleupSDKError?.invoke(error)
         showDialog(context, error)
     }

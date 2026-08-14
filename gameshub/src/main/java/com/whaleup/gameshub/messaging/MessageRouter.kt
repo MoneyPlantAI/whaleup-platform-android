@@ -178,6 +178,9 @@ object MessageRouter {
     private fun routeGameplay(msg: BiomeMessage): List<RouteAction> {
         return when (msg.action) {
             BiomeMessageAction.ROUND_STARTED -> {
+                // A new round must obtain a fresh game session from game-start.
+                BiomeState.setGameSessionId(null)
+
                 val gameId = (msg.data?.get("gameId") as? String)
                     ?: BiomeState.getCurrentGameId()
 
@@ -222,7 +225,7 @@ object MessageRouter {
                 val gemsEarned = (msg.data?.get("gems") as? Number)?.toInt() ?: 0
                 val completedGameId = BiomeState.getCurrentGameId()
                 val completedUserId = BiomeState.getUserConfig()?.userId
-                val sessionId = BiomeState.getSessionId()
+                val gameSessionId = BiomeState.getGameSessionId()
                 val playTimeInSec = (msg.data?.get("playTimeInSec") as? Number)?.toInt() ?: 0
                 val score = (msg.data?.get("score") as? Number)?.toInt() ?: gemsEarned
 
@@ -248,14 +251,17 @@ object MessageRouter {
                 val payload = mapOf(
                     "userId" to completedUserId,
                     "gameId" to completedGameId,
-                    "gameSessionId" to (sessionId ?: ""),
+                    "gameSessionId" to (gameSessionId ?: ""),
                     "score" to score,
                     "playTimeInSec" to playTimeInSec
                 )
 
                 Log.d(TAG, "gameend payload: $payload")
                 // ✅ Sync with backend
-                if (!completedUserId.isNullOrEmpty() && !completedGameId.isNullOrEmpty()) {
+                if (!completedUserId.isNullOrEmpty() &&
+                    !completedGameId.isNullOrEmpty() &&
+                    !gameSessionId.isNullOrEmpty()
+                ) {
 
                     actions.add(
                         RouteAction.ApiCall(
@@ -272,10 +278,11 @@ object MessageRouter {
                             BiomeSdkEvent(
                                 type = BiomeMessageType.CRITICAL_FAILURE,
                                 action = BiomeMessageAction.ROUND_COMPLETE_ERROR,
-                                message = "Missing gameId or userId",
+                                message = "Missing gameId, userId, or gameSessionId",
                                 data = mapOf(
                                     "gameId" to completedGameId,
-                                    "userId" to completedUserId
+                                    "userId" to completedUserId,
+                                    "gameSessionId" to gameSessionId
                                 )
                             )
                         )
@@ -283,7 +290,9 @@ object MessageRouter {
 
                     Log.w(
                         TAG,
-                        "gameEnded API call NOT added: missingUserId=${completedUserId.isNullOrEmpty()}, missingGameId=${completedGameId.isNullOrEmpty()}"
+                        "gameEnded API call NOT added: missingUserId=${completedUserId.isNullOrEmpty()}, " +
+                            "missingGameId=${completedGameId.isNullOrEmpty()}, " +
+                            "missingGameSessionId=${gameSessionId.isNullOrEmpty()}"
                     )
                 }
 

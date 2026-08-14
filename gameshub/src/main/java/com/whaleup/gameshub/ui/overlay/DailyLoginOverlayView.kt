@@ -11,6 +11,8 @@ import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeState
 import com.whaleup.gameshub.data.GamesHubSession
 import com.whaleup.gameshub.data.HubSessionFlow
+import com.whaleup.gameshub.data.BiomeMessageType
+import com.whaleup.gameshub.data.SDKEvent
 import com.whaleup.gameshub.data.PlayerPrefsManager
 import com.whaleup.gameshub.data.SessionEligibility
 import com.whaleup.gameshub.network.APIBridge
@@ -40,6 +42,7 @@ class DailyLoginOverlayView @JvmOverloads constructor(
     private var isClaiming = false
     private var loginCoins = 0
     private var displayDay = 1
+    private var viewedDay: Int? = null
 
     init {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_daily_login_overlay, this, true)
@@ -101,12 +104,29 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         bringToFront()
         visibility = View.VISIBLE
         flRoot.visibility = View.VISIBLE
+        if (viewedDay != displayDay) {
+            viewedDay = displayDay
+            emitAnalytics(
+                action = "daily_login_coin_earned_popup_viewed",
+                message = "Daily login coin earned popup viewed",
+                data = mapOf(
+                    "sesson_id" to (BiomeState.getSessionId() ?: ""),
+                    "user_id" to (profile?.basic?.userId ?: ""),
+                    "coin_amount" to loginCoins
+                )
+            )
+        }
         return true
     }
 
     private fun handleClaim() {
         if (isClaiming) return
         isClaiming = true
+        emitAnalytics(
+            action = "Daily_Login_Claimed",
+            message = "Daily login reward claimed",
+            data = mapOf("loginReward" to loginCoins)
+        )
         btnClaim.alpha = 0.65f
         tvCtaText.text = HubStrings.get("dailyLogin.claiming", "Claiming…")
         tvCtaArrow.visibility = View.GONE
@@ -173,6 +193,12 @@ class DailyLoginOverlayView @JvmOverloads constructor(
     private fun saveClaimCompleted() {
         PlayerPrefsManager.set("daily_login_completed", true)
         PlayerPrefsManager.set("last_login_date", SessionEligibility.today())
+    }
+
+    private fun emitAnalytics(action: String, message: String, data: Map<String, Any?>) {
+        GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
+            SDKEvent(type = BiomeMessageType.ANALYTICS_EVENT, action = action, message = message, data = data)
+        )
     }
 
     fun dismiss() {

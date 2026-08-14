@@ -758,13 +758,16 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                 sendProfileToWebView("server")
             }
             HubEndpoint.GAME_STARTED -> {
-                val sessionId = response.optString("sessionId")
-                if (sessionId.isNotEmpty()) {
-                    BiomeState.setSessionId(sessionId)
-                    APIBridge.setSessionId(sessionId)
+                val gameSessionId = response.optString("gameSessionId").trim()
+                if (gameSessionId.isNotEmpty()) {
+                    BiomeState.setGameSessionId(gameSessionId)
+                    Log.d(TAG, "Stored game-start session for the game-end payload")
+                } else {
+                    Log.e(TAG, "game-start response is missing gameSessionId")
                 }
             }
             HubEndpoint.GAME_ENDED -> {
+                BiomeState.setGameSessionId(null)
                 val coinsEarned = response.optInt("coinsEarnedForGame", -1)
                 val gemsEarned = response.optInt("gemsEarned", -1)
                 if (coinsEarned >= 0) BiomeState.incrementCoinsEarned(coinsEarned)

@@ -37,6 +37,7 @@ import com.whaleup.gameshub.messaging.toMap
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.util.SdkErrorPresenter
+import com.whaleup.gameshub.util.ClientErrorReporter
 import com.whaleup.gameshub.webview.HubWebViewActivity
 import org.json.JSONObject
 
@@ -417,11 +418,12 @@ class GamesHubFragment : Fragment() {
         val sessionId = GamesHubSession.props?.userConfig?.sessionId
         GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             com.whaleup.gameshub.data.SDKEvent(
-                type = com.whaleup.gameshub.data.BiomeMessageType.HUB_EVENT,
-                action = com.whaleup.gameshub.data.BiomeMessageAction.HUB_VIEWED,
-                message = "Games Hub viewed with ${catalogGames.size} game(s) available",
+                type = com.whaleup.gameshub.data.BiomeMessageType.ANALYTICS_EVENT,
+                action = "Game_Hub_Entered",
+                message = "Native Hub entered",
                 data = buildMap {
-                    put("tab_name", "games_hub")
+                    put("flow", com.whaleup.gameshub.data.SessionEligibility.currentFlow().name)
+                    put("tab_name", activeTab)
                     if (userId != null) put("user_id", userId)
                     if (sessionId != null) put("session_id", sessionId)
                     put("games_available_count", catalogGames.size)
@@ -455,7 +457,16 @@ class GamesHubFragment : Fragment() {
             override fun onSuccess(response: String) {
                 runCatching { HubStrings.merge(JSONObject(response)) }
                     .onSuccess { activity?.runOnUiThread { applyRemoteStrings() } }
-                    .onFailure { Log.w("GamesHubFragment", "Failed to merge remote strings", it) }
+                    .onFailure {
+                        Log.w("GamesHubFragment", "Failed to merge remote strings", it)
+                        ClientErrorReporter.reportSdk(
+                            SDKError(
+                                type = com.whaleup.gameshub.data.BiomeMessageType.LOAD_FAILURE,
+                                action = "stringsMergeFailed",
+                                data = mapOf("reason" to (it.message ?: "Invalid remote strings"))
+                            )
+                        )
+                    }
             }
 
             override fun onError(code: Int, message: String) {
@@ -551,6 +562,13 @@ class GamesHubFragment : Fragment() {
 
             override fun onError(error: Exception) {
                 isLoadingCatalog = false
+                ClientErrorReporter.reportSdk(
+                    SDKError(
+                        type = com.whaleup.gameshub.data.BiomeMessageType.LOAD_FAILURE,
+                        action = "catalogLoadFailed",
+                        data = mapOf("reason" to (error.message ?: "Failed to load catalog"))
+                    )
+                )
                 activity?.runOnUiThread {
                     view?.findViewById<View>(R.id.flSkeletonContainer)?.visibility = View.GONE
                     if (activeTab == "leaderboard") {
@@ -609,14 +627,16 @@ class GamesHubFragment : Fragment() {
 
         GamesHubSession.props?.onWhaleupSDKEvent?.invoke(
             com.whaleup.gameshub.data.SDKEvent(
-                type = com.whaleup.gameshub.data.BiomeMessageType.HUB_EVENT,
-                action = com.whaleup.gameshub.data.BiomeMessageAction.HUB_GAME_CARD_TAPPED,
-                message = "Game card tapped: ${game.name} at position $cardPosition",
+                type = com.whaleup.gameshub.data.BiomeMessageType.ANALYTICS_EVENT,
+                action = "game_clicked",
+                message = "Game selected: ${game.name}",
                 data = buildMap {
                     put("game_id", game.id)
+                    put("gameId", game.id)
                     put("game_name", game.name)
                     put("card_position", cardPosition)
                     if (userId != null) put("user_id", userId)
+                    put("sesson_id", BiomeState.getSessionId() ?: "")
                 }
             )
         )
