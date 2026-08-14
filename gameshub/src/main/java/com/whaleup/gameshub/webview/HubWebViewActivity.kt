@@ -17,14 +17,20 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.Manifest
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.ViewCompat
@@ -81,6 +87,39 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     private var entryUrl: String? = null
     private var multiplayerModule: com.whaleup.gameshub.multiplayer.MultiplayerModule? = null
     private var domainErrorDialog: AlertDialog? = null
+
+    // Microphone permission request handling
+    private var pendingPermissionRequest: PermissionRequest? = null
+    private val audioPermissionLauncher: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            val request = pendingPermissionRequest
+            pendingPermissionRequest = null
+            if (request != null) {
+                if (isGranted) {
+                    Log.d(TAG, "Audio permission granted by user, granting WebView request")
+                    request.grant(request.resources)
+                } else {
+                    Log.w(TAG, "Audio permission denied by user, denying WebView request")
+                    request.deny()
+                }
+            }
+        }
+
+    // WebView file chooser callback handling
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val callback = filePathCallback
+            filePathCallback = null
+            if (callback != null) {
+                var results: Array<Uri>? = null
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val data = result.data
+                    results = WebChromeClient.FileChooserParams.parseResult(result.resultCode, data)
+                }
+                callback.onReceiveValue(results)
+            }
+        }
 
     // API de-duplication (matches Whaleup's apiInFlightRequests)
     private val apiInFlightRequests = mutableMapOf<String, Boolean>()
@@ -211,7 +250,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             }
         }
 
-        // Enable console logs from WebView
+        // Enable console logs, audio permission handling, and file chooser in WebView
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 consoleMessage?.let {
@@ -223,6 +262,55 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                         ConsoleMessage.MessageLevel.TIP -> Log.d("WebConsole", message)
                         else -> Log.v("WebConsole", message)
                     }
+                }
+                return true
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                if (request == null) return
+                val requestedResources = request.resources ?: arrayOf()
+                Log.d(TAG, "onPermissionRequest called for resources: ${requestedResources.joinToString()}")
+
+                if (requestedResources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    if (ContextCompat.checkSelfPermission(
+                            this@HubWebViewActivity,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.d(TAG, "RECORD_AUDIO permission already granted, granting web request")
+                        request.grant(requestedResources)
+                    } else {
+                        Log.d(TAG, "Requesting RECORD_AUDIO runtime permission for web audio capture")
+                        pendingPermissionRequest?.deny()
+                        pendingPermissionRequest = request
+                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                } else {
+                    request.grant(requestedResources)
+                }
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                Log.d(TAG, "onShowFileChooser called")
+                this@HubWebViewActivity.filePathCallback?.onReceiveValue(null)
+                this@HubWebViewActivity.filePathCallback = filePathCallback
+
+                val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+
+                try {
+                    fileChooserLauncher.launch(intent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to launch file chooser intent", e)
+                    this@HubWebViewActivity.filePathCallback?.onReceiveValue(null)
+                    this@HubWebViewActivity.filePathCallback = null
+                    return false
                 }
                 return true
             }
@@ -274,6 +362,10 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
         navigationBarHideHandler.removeCallbacks(navigationBarHideRunnable)
         unregisterNetworkListener()
         multiplayerModule?.disconnect()
+        pendingPermissionRequest?.deny()
+        pendingPermissionRequest = null
+        filePathCallback?.onReceiveValue(null)
+        filePathCallback = null
         webView.destroy()
     }
 
