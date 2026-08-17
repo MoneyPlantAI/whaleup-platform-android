@@ -317,38 +317,49 @@ object APIBridge {
     }
 
     suspend fun getMultiplayerTicketSuspend(playerId: String, engineUrl: String): String {
+        return getMultiplayerCredentialSuspend(playerId, engineUrl, "ticket")
+    }
+
+    /** Reusable credential used by Socket.IO reconnect handshakes. */
+    suspend fun getMultiplayerTokenSuspend(playerId: String, engineUrl: String): String {
+        return getMultiplayerCredentialSuspend(playerId, engineUrl, "token")
+    }
+
+    private suspend fun getMultiplayerCredentialSuspend(
+        playerId: String,
+        engineUrl: String,
+        credentialName: String
+    ): String {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val payload = JSONObject().apply { put("playerId", playerId) }
             val targetUrl = if (engineUrl.endsWith("/")) "${engineUrl}api/v1/session" else "$engineUrl/api/v1/session"
             val url = URL(targetUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            connection.setRequestProperty("accept", "*/*")
-            
-            connection.doOutput = true
-            val writer = OutputStreamWriter(connection.outputStream, "UTF-8")
-            writer.write(payload.toString())
-            writer.flush()
-            writer.close()
-            
-            val responseCode = connection.responseCode
-            if (responseCode in 200..299) {
-                val reader = BufferedReader(InputStreamReader(connection.inputStream, "UTF-8"))
-                val result = reader.use { it.readText() }
-                val json = JSONObject(result)
-                val data = json.getJSONObject("data")
-                data.getString("ticket")
-            } else {
-                val errorStream = connection.errorStream
-                val errorMsg = if (errorStream != null) {
-                    BufferedReader(InputStreamReader(errorStream, "UTF-8")).use { it.readText() }
-                } else {
-                    "HTTP $responseCode"
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                setRequestProperty("Accept", "application/json")
+                doOutput = true
+            }
+
+            try {
+                OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                    writer.write(payload.toString())
                 }
-                throw Exception("Local engine session failed: $errorMsg")
+
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val result = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    JSONObject(result).getJSONObject("data").getString(credentialName)
+                } else {
+                    val errorMessage = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        ?.takeIf(String::isNotBlank)
+                        ?: "HTTP $responseCode"
+                    throw Exception("Multiplayer engine session failed: $errorMessage")
+                }
+            } finally {
+                connection.disconnect()
             }
         }
     }

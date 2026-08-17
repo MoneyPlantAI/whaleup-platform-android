@@ -10,27 +10,53 @@ import io.socket.client.IO
 import io.socket.client.Socket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 private const val TAG = "MultiplayerModule"
+private const val QUEUE_LOBBY_RECONNECT_TIMEOUT_MS = 15_000L
+private const val IN_GAME_RECONNECT_TIMEOUT_MS = 30_000L
 
 class MultiplayerModule(
     private val bridge: WhaleBridge,
     private val engineUrl: String,
     private val playerId: String,
     private val currentGameId: () -> String?,
-    private val ticketProvider: suspend () -> String
+    private val tokenProvider: suspend () -> String,
+    private val onSocketReconnected: () -> Unit = {},
+    private val onReconnectExpired: (Long) -> Unit = {}
 ) {
     private var socket: Socket? = null
+    @Volatile
     private var isConnected = false
+    @Volatile
+    private var isConnecting = false
+    @Volatile
+    private var connectionGeneration = 0
+    private var hasConnectedOnce = false
+    @Volatile
+    private var sessionStatus: String? = null
+    @Volatile
+    private var recoveryInProgress = false
+    @Volatile
+    private var recoveryExpired = false
+    private var activeRecoveryTimeoutMs = IN_GAME_RECONNECT_TIMEOUT_MS
+    private var recoveryTimeoutJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
     private val pendingCommands = mutableListOf<() -> Unit>()
 
     fun connect(reconnect: Boolean = false) {
-        if (isConnected && !reconnect) return
+        if (recoveryExpired) {
+            Log.w(TAG, "Ignoring multiplayer reconnect after the engine recovery window expired")
+            return
+        }
+        if (isConnected) return
         val gameId = currentGameId()
         val game = CatalogCache.findById(gameId ?: "")
         if (game?.isMultiplayerGame() != true) {
@@ -38,24 +64,44 @@ class MultiplayerModule(
             return
         }
 
+        socket?.let { existingSocket ->
+            if (reconnect) {
+                Log.i(TAG, "Requesting immediate multiplayer socket reconnect")
+                existingSocket.connect()
+            }
+            return
+        }
+        if (isConnecting) return
+        isConnecting = true
+        val generation = ++connectionGeneration
+        Log.i(TAG, "Creating multiplayer session for game='$gameId', engine='$engineUrl'")
+
         scope.launch {
             try {
-                val ticket = ticketProvider()
-                openSocket(ticket)
+                val token = tokenProvider()
+                if (generation != connectionGeneration) return@launch
+                openSocket(token)
             } catch (e: Exception) {
-                Log.e(TAG, "Ticket fetch failed", e)
-                sendError("TICKET_FAILED", "Unable to get session ticket: ${e.message}", retryable = true)
+                if (generation == connectionGeneration) {
+                    Log.e(TAG, "Multiplayer session fetch failed", e)
+                    sendError("TICKET_FAILED", "Unable to create multiplayer session: ${e.message}", retryable = true)
+                }
+            } finally {
+                if (generation == connectionGeneration) isConnecting = false
             }
         }
     }
 
-    private fun openSocket(ticket: String) {
+    private fun openSocket(token: String) {
+        val encodedPlayerId = URLEncoder.encode(playerId, StandardCharsets.UTF_8.name())
+        val encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8.name())
         val opts = IO.Options().apply {
-            query = "playerId=$playerId&ticket=$ticket"
+            query = "playerId=$encodedPlayerId&token=$encodedToken"
             transports = arrayOf("websocket")
             reconnection = true
-            reconnectionAttempts = 5
-            reconnectionDelay = 2000
+            reconnectionAttempts = Int.MAX_VALUE
+            reconnectionDelay = 1000
+            reconnectionDelayMax = 2000
         }
 
         socket = IO.socket(URI.create(engineUrl), opts).apply {
@@ -63,11 +109,16 @@ class MultiplayerModule(
             // ── Connection lifecycle
             on(Socket.EVENT_CONNECT) {
                 isConnected = true
-                sendToWebView(BiomeMessageAction.MP_CONNECTED, mapOf("connected" to true, "playerId" to playerId))
-                synchronized(pendingCommands) {
-                    pendingCommands.forEach { it.invoke() }
-                    pendingCommands.clear()
-                }
+                val isReconnect = hasConnectedOnce
+                hasConnectedOnce = true
+                Log.i(TAG, "Multiplayer socket connected (reconnect=$isReconnect)")
+                val connectionData = mapOf("connected" to true, "playerId" to playerId)
+                // The published Hike SDK action is mp_connected, while the current
+                // Unity Ludo build subscribes to mp_connect_response. Send both so
+                // existing games and the current build receive the connection ACK.
+                sendToWebView(BiomeMessageAction.MP_CONNECTED, connectionData)
+                sendToWebView(BiomeMessageAction.MP_CONNECT_RESP, connectionData)
+                if (!isReconnect) flushPendingCommands()
             }
 
             on(Socket.EVENT_DISCONNECT) { args ->
@@ -75,6 +126,7 @@ class MultiplayerModule(
                 val first = if (args != null && args.isNotEmpty()) args[0] else null
                 val reason = first?.toString() ?: "unknown"
                 sendError("DISCONNECTED", reason, retryable = true)
+                if (hasConnectedOnce) startRecoveryTimeout()
             }
 
             on(Socket.EVENT_CONNECT_ERROR) { args ->
@@ -87,6 +139,7 @@ class MultiplayerModule(
             on("queue.timer")              { args -> relay(BiomeMessageAction.MP_QUEUE_TIMER, args) }
             on("queue.exit")               { args -> relay(BiomeMessageAction.MP_QUEUE_EXIT, args) }
             on("queue.disconnect")         { args -> relay(BiomeMessageAction.MP_QUEUE_DISCONNECT, args) }   // bidirectional push
+            on("queue.reconnected")        { args -> confirmRecovery(); relay(BiomeMessageAction.MP_QUEUE_RECONNECT, args) }
 
             // ── Engine → Client: Lobby events (listen only, relay to WebView)
             on("lobby.joined")             { args -> relay(BiomeMessageAction.MP_LOBBY_JOINED, args) }        // Engine pushes; client does NOT emit back
@@ -103,7 +156,7 @@ class MultiplayerModule(
             on("lobby.exit")               { args -> relay(BiomeMessageAction.MP_LOBBY_EXIT, args) }
             on("lobby.disbanded")          { args -> relay(BiomeMessageAction.MP_LOBBY_DISBANDED, args) }
             on("lobby.disconnect")         { args -> relay(BiomeMessageAction.MP_LOBBY_DISCONNECT, args) }   // bidirectional push
-            on("lobby.reconnected")        { args -> relay(BiomeMessageAction.MP_LOBBY_RECONNECTED, args) }  // Engine pushes automatically
+            on("lobby.reconnected")        { args -> confirmRecovery(); relay(BiomeMessageAction.MP_LOBBY_RECONNECTED, args) }
 
             // ── Engine → Client: GameRoom events (listen only, relay to WebView)
             on("gameRoom.joined")          { args -> relay(BiomeMessageAction.MP_GAMEROOM_JOINED, args) }        // Engine pushes; client does NOT emit back
@@ -111,12 +164,19 @@ class MultiplayerModule(
             on("gameRoom.start_countdown") { args -> relay(BiomeMessageAction.MP_GAMEROOM_START_CDOWN, args) }
             on("gameRoom.player_left")     { args -> relay(BiomeMessageAction.MP_GAMEROOM_PLAYER_LEFT, args) }   // broadcast
             on("gameRoom.disconnect")      { args -> relay(BiomeMessageAction.MP_GAMEROOM_DISCONNECT, args) }    // bidirectional push
-            on("gameRoom.reconnected")     { args -> relay(BiomeMessageAction.MP_GAMEROOM_RECONNECTED, args) }   // Engine pushes automatically
+            on("gameRoom.reconnected")     { args -> confirmRecovery(); relay(BiomeMessageAction.MP_GAMEROOM_RECONNECTED, args) }
             on("gameRoom.complete")        { args -> relay(BiomeMessageAction.MP_GAMEROOM_COMPLETE, args) }
             on("gameRoom.broadcast")       { args -> relay(BiomeMessageAction.MP_GAMEROOM_BROADCAST, args) }    // FIX: relay whole payload as gameRoom_broadcast
 
             // ── Engine → Client: Global events
-            on("session.status")           { args -> relay(BiomeMessageAction.MP_SESSION_STATUS, args) }
+            on("session.status")           { args ->
+                val status = payloadMap(args)?.get("status")?.toString()
+                sessionStatus = status
+                if (recoveryInProgress && status == "ONLINE") {
+                    expireRecovery(activeRecoveryTimeoutMs)
+                }
+                relay(BiomeMessageAction.MP_SESSION_STATUS, args)
+            }
             on("engine.error")             { args -> relay(BiomeMessageAction.MP_ENGINE_ERROR, args) }
             on("evicted")                  { args -> relay(BiomeMessageAction.MP_EVICTED, args) }
             on("timer.tick")               { args -> relay(BiomeMessageAction.MP_TIMER_TICK, args) }            // broadcast to everyone
@@ -126,10 +186,73 @@ class MultiplayerModule(
     }
 
     fun disconnect() {
+        recoveryTimeoutJob?.cancel()
+        recoveryTimeoutJob = null
+        recoveryInProgress = false
+        socket?.off()
         socket?.disconnect()
         socket = null
         isConnected = false
+        isConnecting = false
+        connectionGeneration++
         synchronized(pendingCommands) {
+            pendingCommands.clear()
+        }
+    }
+
+    private fun startRecoveryTimeout() {
+        if (recoveryInProgress) return
+        recoveryInProgress = true
+        val timeoutMs = reconnectTimeoutMs()
+        activeRecoveryTimeoutMs = timeoutMs
+        recoveryTimeoutJob?.cancel()
+        recoveryTimeoutJob = scope.launch {
+            delay(timeoutMs)
+            if (recoveryInProgress) expireRecovery(timeoutMs)
+        }
+    }
+
+    private fun reconnectTimeoutMs(): Long = when (sessionStatus) {
+        "QUEUED", "IN_LOBBY" -> QUEUE_LOBBY_RECONNECT_TIMEOUT_MS
+        else -> IN_GAME_RECONNECT_TIMEOUT_MS
+    }
+
+    private fun confirmRecovery() {
+        if (!recoveryInProgress) return
+        recoveryInProgress = false
+        recoveryExpired = false
+        recoveryTimeoutJob?.cancel()
+        recoveryTimeoutJob = null
+        flushPendingCommands()
+        onSocketReconnected()
+    }
+
+    private fun expireRecovery(timeoutMs: Long) {
+        if (!recoveryInProgress) return
+        recoveryInProgress = false
+        recoveryExpired = true
+        recoveryTimeoutJob?.cancel()
+        recoveryTimeoutJob = null
+        socket?.off()
+        socket?.disconnect()
+        socket = null
+        isConnected = false
+        synchronized(pendingCommands) { pendingCommands.clear() }
+        onReconnectExpired(timeoutMs)
+    }
+
+    private fun payloadMap(args: Array<out Any>?): Map<*, *>? {
+        val first = args?.firstOrNull()
+        return when (first) {
+            is JSONObject -> first.toMp()
+            is Map<*, *> -> first
+            else -> null
+        }
+    }
+
+    private fun flushPendingCommands() {
+        synchronized(pendingCommands) {
+            pendingCommands.forEach { it.invoke() }
             pendingCommands.clear()
         }
     }

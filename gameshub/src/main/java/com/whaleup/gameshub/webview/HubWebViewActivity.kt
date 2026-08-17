@@ -10,8 +10,6 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -41,6 +39,7 @@ import com.whaleup.gameshub.R
 import com.whaleup.gameshub.data.BiomeMessageAction
 import com.whaleup.gameshub.data.BiomeMessageType
 import com.whaleup.gameshub.data.BiomeState
+import com.whaleup.gameshub.data.CatalogCache
 import com.whaleup.gameshub.data.GamesHubSession
 import com.whaleup.gameshub.data.PlayerPrefsManager
 import com.whaleup.gameshub.data.isMultiplayerGame
@@ -53,6 +52,7 @@ import com.whaleup.gameshub.messaging.RouteAction
 import com.whaleup.gameshub.messaging.SharePayload
 import com.whaleup.gameshub.messaging.toMap
 import com.whaleup.gameshub.messaging.toList
+import com.whaleup.gameshub.multiplayer.MultiplayerModule
 import com.whaleup.gameshub.network.APIBridge
 import com.whaleup.gameshub.network.APICallback
 import com.whaleup.gameshub.network.HubEndpoint
@@ -81,11 +81,11 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
     private lateinit var webView: WebView
     private lateinit var bridge: WhaleBridge
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var networkWasLost = false
+    private var networkInterruptionActive = false
     private val navigationBarHideHandler = Handler(Looper.getMainLooper())
     private val navigationBarHideRunnable = Runnable { hideBottomNavigationBar() }
     private var entryUrl: String? = null
-    private var multiplayerModule: com.whaleup.gameshub.multiplayer.MultiplayerModule? = null
+    private var multiplayerModule: MultiplayerModule? = null
     private var domainErrorDialog: AlertDialog? = null
 
     // Microphone permission request handling
@@ -457,6 +457,7 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
             return
         }
 
+        SdkErrorPresenter.dismissInternetErrorDialog()
         val url = webView.url ?: entryUrl
         if (url != null) {
             webView.loadUrl(url)
@@ -560,22 +561,38 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
                 is RouteAction.MultiplayerCommand -> {
                     if (multiplayerModule == null) {
                         val gameId = intent.getStringExtra("GAME_ID") ?: BiomeState.getCurrentGameId()
-                        if (!gameId.isNullOrEmpty()) {
-                            val game = com.whaleup.gameshub.data.CatalogCache.findById(gameId)
-                            val gameEngineUrl = game?.gameEngineUrl
-                            val currentConfig = BiomeState.getUserConfig()
-                            if (!gameEngineUrl.isNullOrEmpty() && currentConfig != null) {
-                                multiplayerModule = com.whaleup.gameshub.multiplayer.MultiplayerModule(
-                                    bridge         = bridge,
-                                    engineUrl      = gameEngineUrl,
-                                    playerId       = currentConfig.userId,
-                                    currentGameId  = { BiomeState.getCurrentGameId() },
-                                    ticketProvider = {
-                                        val currentUrl = com.whaleup.gameshub.data.CatalogCache.findById(BiomeState.getCurrentGameId() ?: "")?.gameEngineUrl ?: "http://10.0.2.2:3000"
-                                        com.whaleup.gameshub.network.APIBridge.getMultiplayerTicketSuspend(currentConfig.userId, currentUrl)
+                        val game = gameId?.let(CatalogCache::findById)
+                        val gameEngineUrl = game?.gameEngineUrl
+                        val currentConfig = BiomeState.getUserConfig()
+                        val playerId = currentConfig?.userId?.trim()
+                        when {
+                            gameId.isNullOrEmpty() -> sendMultiplayerSetupError("Missing current game ID", gameId)
+                            game == null -> sendMultiplayerSetupError("Game '$gameId' is missing from the catalog", gameId)
+                            gameEngineUrl.isNullOrBlank() -> sendMultiplayerSetupError(
+                                "Multiplayer engine URL is not configured for game '$gameId'.",
+                                gameId
+                            )
+                            playerId.isNullOrEmpty() -> sendMultiplayerSetupError("Missing multiplayer player ID", gameId)
+                            else -> {
+                                multiplayerModule = MultiplayerModule(
+                                    bridge = bridge,
+                                    engineUrl = gameEngineUrl,
+                                    playerId = playerId,
+                                    currentGameId = { BiomeState.getCurrentGameId() },
+                                    tokenProvider = {
+                                        APIBridge.getMultiplayerTokenSuspend(
+                                            playerId,
+                                            gameEngineUrl
+                                        )
+                                    },
+                                    onSocketReconnected = {
+                                        runOnUiThread { notifyNetworkRestoredIfNeeded() }
+                                    },
+                                    onReconnectExpired = { timeoutMs ->
+                                        runOnUiThread { handleMultiplayerReconnectExpired(timeoutMs) }
                                     }
                                 )
-                                Log.i(TAG, "MultiplayerModule dynamically enabled on action: ${action.action}")
+                                Log.i(TAG, "MultiplayerModule enabled for game='$gameId', engine='$gameEngineUrl', action='${action.action}'")
                             }
                         }
                     }
@@ -1054,17 +1071,39 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
     // region Network Monitoring
 
+    private fun sendMultiplayerSetupError(message: String, gameId: String?) {
+        Log.e(TAG, message)
+        val data = mapOf(
+            "reason" to message,
+            "retryable" to false,
+            "gameId" to gameId
+        )
+        bridge.sendMessageToWebView(
+            BiomeMessageType.MULTIPLAYER,
+            BiomeMessageAction.MP_ERROR,
+            mapOf(
+                "code" to "MULTIPLAYER_NOT_CONFIGURED",
+                "message" to message,
+                "retryable" to false
+            )
+        )
+        reportSdkError(
+            SDKError(
+                type = BiomeMessageType.LOAD_FAILURE,
+                action = "multiplayerNotConfigured",
+                data = data
+            )
+        )
+    }
+
     private fun registerNetworkListener() {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onLost(network: Network) {
                 runOnUiThread {
-                    if (networkWasLost) return@runOnUiThread
-                    networkWasLost = true
+                    if (SdkErrorPresenter.isInternetAvailable(this@HubWebViewActivity)) return@runOnUiThread
+                    if (networkInterruptionActive) return@runOnUiThread
+                    networkInterruptionActive = true
                     Log.w(TAG, "Network lost")
                     bridge.sendMessageToWebView(
                         BiomeMessageType.NETWORK_INTERRUPTION,
@@ -1083,38 +1122,60 @@ class HubWebViewActivity : AppCompatActivity(), ActionProcessor, InternetErrorRe
 
             override fun onAvailable(network: Network) {
                 runOnUiThread {
-                    if (!networkWasLost) return@runOnUiThread
-                    networkWasLost = false
                     Log.d(TAG, "Network restored")
-                    bridge.sendMessageToWebView(
-                        BiomeMessageType.NETWORK_INTERRUPTION,
-                        BiomeMessageAction.NETWORK_RESTORED,
-                        mapOf("timestamp" to System.currentTimeMillis())
-                    )
-                    reportSdkError(
-                        SDKError(
-                            type = BiomeMessageType.NETWORK_INTERRUPTION,
-                            action = BiomeMessageAction.NETWORK_RESTORED,
-                            data = mapOf(
-                                "timestamp" to System.currentTimeMillis(),
-                                "retryable" to false
-                            )
-                        )
-                    )
+                    multiplayerModule?.connect(reconnect = true)
+                    if (multiplayerModule == null) notifyNetworkRestoredIfNeeded()
                 }
             }
         }
 
         try {
-            cm.registerNetworkCallback(request, networkCallback!!)
+            cm.registerDefaultNetworkCallback(networkCallback!!)
         } catch (e: SecurityException) {
+            networkCallback = null
             Log.e(TAG, "Missing ACCESS_NETWORK_STATE permission", e)
         }
     }
 
+    private fun notifyNetworkRestoredIfNeeded() {
+        SdkErrorPresenter.dismissInternetErrorDialog()
+        if (!networkInterruptionActive) return
+        networkInterruptionActive = false
+        bridge.sendMessageToWebView(
+            BiomeMessageType.NETWORK_INTERRUPTION,
+            BiomeMessageAction.NETWORK_RESTORED,
+            mapOf("timestamp" to System.currentTimeMillis())
+        )
+    }
+
+    private fun handleMultiplayerReconnectExpired(timeoutMs: Long) {
+        networkInterruptionActive = false
+        val data = mapOf(
+            "reason" to "Multiplayer reconnect window expired. Please close and restart the game.",
+            "retryable" to false,
+            "reconnectTimeoutMs" to timeoutMs
+        )
+        bridge.sendMessageToWebView(
+            BiomeMessageType.NETWORK_INTERRUPTION,
+            BiomeMessageAction.NETWORK_LOAD_ERROR,
+            data
+        )
+        reportSdkError(
+            SDKError(
+                type = BiomeMessageType.NETWORK_INTERRUPTION,
+                action = BiomeMessageAction.NETWORK_LOAD_ERROR,
+                data = data
+            )
+        )
+    }
+
     private fun unregisterNetworkListener() {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        networkCallback?.let { cm.unregisterNetworkCallback(it) }
+        networkCallback?.let { callback ->
+            runCatching { cm.unregisterNetworkCallback(callback) }
+                .onFailure { Log.w(TAG, "Unable to unregister network callback", it) }
+        }
+        networkCallback = null
     }
 
     // endregion

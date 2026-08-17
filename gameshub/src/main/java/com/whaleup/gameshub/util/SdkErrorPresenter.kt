@@ -10,8 +10,11 @@ import android.util.Log
 import androidx.appcompat.app.AlertDialog
 import com.whaleup.gameshub.data.BiomeMessageAction
 import com.whaleup.gameshub.data.BiomeMessageType
+import com.whaleup.gameshub.data.BiomeState
+import com.whaleup.gameshub.data.CatalogCache
 import com.whaleup.gameshub.data.GamesHubSession
 import com.whaleup.gameshub.data.SDKError
+import com.whaleup.gameshub.data.isMultiplayerGame
 import com.whaleup.gameshub.ui.GamesHubActivity
 import com.whaleup.gameshub.webview.HubWebViewActivity
 
@@ -35,8 +38,9 @@ object SdkErrorPresenter {
     const val UNKNOWN_NETWORK_ERROR_CODE = "12"
     const val INTERNET_ERROR_MESSAGE = "Please check your internet connection and try again."
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private var activeDialog: AlertDialog? = null
+    private var activeDialogIsInternetError = false
 
     fun report(context: Context?, error: SDKError) {
         ClientErrorReporter.reportSdk(error)
@@ -45,6 +49,26 @@ object SdkErrorPresenter {
     }
 
     fun isInternetAvailable(context: Context): Boolean = hasActiveInternet(context)
+
+    internal fun isMultiplayerGameActive(): Boolean {
+        val currentGameId = BiomeState.getCurrentGameId() ?: return false
+        return CatalogCache.findById(currentGameId)?.isMultiplayerGame() == true
+    }
+
+    internal fun shouldSuppressDialog(isInternetError: Boolean, errorAction: String): Boolean =
+        isInternetError &&
+            isMultiplayerGameActive() &&
+            errorAction != BiomeMessageAction.NETWORK_LOAD_ERROR
+
+    fun dismissInternetErrorDialog() {
+        mainHandler.post {
+            if (activeDialogIsInternetError) {
+                activeDialog?.dismiss()
+                activeDialog = null
+                activeDialogIsInternetError = false
+            }
+        }
+    }
 
     private fun showDialog(context: Context?, error: SDKError) {
         if (context == null) return
@@ -58,6 +82,16 @@ object SdkErrorPresenter {
 
                 val isInternetError = isInternetError(context, error)
                 val errorCode = errorCodeFor(context, error)
+                if (shouldSuppressDialog(isInternetError, error.action)) {
+                    Log.i(
+                        TAG,
+                        "Suppressing transient internet dialog ($errorCode) for multiplayer game " +
+                            "'${BiomeState.getCurrentGameId()}'"
+                    )
+                    activeDialog = null
+                    activeDialogIsInternetError = false
+                    return@post
+                }
                 val dialog = AlertDialog.Builder(context)
                     .setTitle(if (isInternetError) "Internet Connection Issue ($errorCode)" else "GamesHub Error")
                     .setMessage(formatError(context, error, isInternetError))
@@ -69,6 +103,13 @@ object SdkErrorPresenter {
                     .show()
 
                 activeDialog = dialog
+                activeDialogIsInternetError = isInternetError
+                dialog.setOnDismissListener {
+                    if (activeDialog === dialog) {
+                        activeDialog = null
+                        activeDialogIsInternetError = false
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Unable to show SDK error dialog", e)
             }

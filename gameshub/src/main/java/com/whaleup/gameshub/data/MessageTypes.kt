@@ -47,6 +47,7 @@ object BiomeMessageAction {
 
     // ─── Multiplayer — SDK → WebView (ACK responses — only 3 events have ACK) ───────
     const val MP_CONNECTED               = "mp_connected"
+    const val MP_CONNECT_RESP            = "mp_connect_response" // Unity bridge compatibility
     const val MP_ERROR                   = "mp_error"
     const val MP_QUEUE_JOIN_RESP         = "queue_join_response"
     const val MP_GAMEROOM_COMMAND_RESP   = "gameRoom_command_response"

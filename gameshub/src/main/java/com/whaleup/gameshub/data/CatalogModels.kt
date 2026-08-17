@@ -40,8 +40,8 @@ data class BonusConfig(
             }
             val imgObj = json.optJSONObject("images")
             val images = BonusConfigImages(
-                treasureBox = imgObj?.optString("treasureBox", null)?.takeIf { it.isNotBlank() },
-                supercoinIcon = imgObj?.optString("supercoinIcon", null)?.takeIf { it.isNotBlank() }
+                treasureBox = imgObj?.optString("treasureBox")?.takeIf(String::isNotBlank),
+                supercoinIcon = imgObj?.optString("supercoinIcon")?.takeIf(String::isNotBlank)
             )
             return BonusConfig(
                 rewardsJourneyDays = json.optInt("rewardsJourneyDays", 7),
@@ -183,13 +183,19 @@ data class AppEntry(
             }
 
             val bannerUrl = getValidUrl("bannerImageUrl", "imageUrl", "bannerUrl", "iconUrl", "icon")
+            val gameEngineUrl = sequenceOf(
+                json.optNullableString("gameEngineUrl"),
+                json.optNullableString("engineUrl"),
+                config["gameEngineUrl"] as? String,
+                config["engineUrl"] as? String
+            ).firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotEmpty) }
 
             return AppEntry(
                 id = json.optString("id", json.optString("gameId", "")),
                 name = json.optString("name", json.optString("gameName", "Unknown")),
                 category = json.optString("category", "General"),
                 entryUrl = json.optString("entryUrl", json.optString("url", "")),
-                gameEngineUrl = json.optNullableString("gameEngineUrl"),
+                gameEngineUrl = gameEngineUrl,
                 bannerImageUrl = bannerUrl,
                 bgUrl = json.optString("bgUrl", config["bgUrl"]?.toString().orEmpty()),
                 logoUrl = getValidUrl("logoUrl", "iconUrl", "icon")
@@ -216,4 +222,4 @@ data class AppEntry(
 }
 
 fun AppEntry.isMultiplayerGame(): Boolean =
-    !gameEngineUrl.isNullOrEmpty()
+    !gameEngineUrl.isNullOrBlank()
