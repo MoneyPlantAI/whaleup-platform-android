@@ -16,6 +16,7 @@ object CatalogLoader {
                     val jsonObject = JSONObject(response)
                     val catalog = HubCatalog.fromJson(jsonObject)
                     BiomeState.setBonusConfig(catalog.bonusConfig)
+                    BiomeState.setImageConfig(catalog.imageConfig)
                     CatalogCache.set(catalog)
                     callback.onSuccess(CatalogCache.get() ?: catalog)
                 } catch (e: Exception) {

@@ -60,11 +60,16 @@ object ImageLoader {
         }
     }
 
-    fun load(url: String, imageView: ImageView, onComplete: ((Boolean) -> Unit)? = null) {
+    fun load(
+        url: String,
+        imageView: ImageView,
+        preserveExistingImage: Boolean = false,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
         val cleanUrl = normalizeImageUrl(url)
         if (cleanUrl == null) {
             imageView.tag = null
-            imageView.setImageBitmap(null)
+            if (!preserveExistingImage) imageView.setImageBitmap(null)
             onComplete?.invoke(false)
             return
         }
@@ -77,7 +82,7 @@ object ImageLoader {
         }
 
         imageView.tag = cleanUrl
-        imageView.setImageBitmap(null)
+        if (!preserveExistingImage) imageView.setImageBitmap(null)
 
         executor.execute {
             val bitmap = imageUrlCandidates(cleanUrl).firstNotNullOfOrNull { candidateUrl ->

@@ -13,7 +13,14 @@ data class CoinBonus(
 data class BonusConfigImages(
     val treasureBox: String? = null,
     val supercoinIcon: String? = null
-)
+) {
+    companion object {
+        fun fromJson(json: JSONObject?): BonusConfigImages = BonusConfigImages(
+            treasureBox = json?.optString("treasureBox")?.takeIf(String::isNotBlank),
+            supercoinIcon = json?.optString("supercoinIcon")?.takeIf(String::isNotBlank)
+        )
+    }
+}
 
 data class BonusConfig(
     val rewardsJourneyDays: Int = 7,
@@ -38,11 +45,7 @@ data class BonusConfig(
                     )
                 }
             }
-            val imgObj = json.optJSONObject("images")
-            val images = BonusConfigImages(
-                treasureBox = imgObj?.optString("treasureBox")?.takeIf(String::isNotBlank),
-                supercoinIcon = imgObj?.optString("supercoinIcon")?.takeIf(String::isNotBlank)
-            )
+            val images = BonusConfigImages.fromJson(json.optJSONObject("images"))
             return BonusConfig(
                 rewardsJourneyDays = json.optInt("rewardsJourneyDays", 7),
                 afterJourneyDailyRewardCoins = json.optInt("afterJourneyDailyRewardCoins", 50),
@@ -57,7 +60,8 @@ data class HubCatalog(
     val games: List<AppEntry>,
     val categories: List<String>,
     val heroBannerUrls: List<String> = emptyList(),
-    val bonusConfig: BonusConfig = BonusConfig()
+    val bonusConfig: BonusConfig = BonusConfig(),
+    val imageConfig: BonusConfigImages = BonusConfigImages()
 ) {
     companion object {
         fun fromJson(json: JSONObject): HubCatalog {
@@ -112,6 +116,9 @@ data class HubCatalog(
             }
 
             val bonusConfig = BonusConfig.fromJson(bonusObj)
+            val imageConfig = BonusConfigImages.fromJson(
+                targetJson.optJSONObject("images") ?: json.optJSONObject("images")
+            )
 
             val activeGames = games
                 .filter { it.isActive }
@@ -120,7 +127,7 @@ data class HubCatalog(
                         .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
                 )
 
-            return HubCatalog(activeGames, categories, heroBannerUrls, bonusConfig)
+            return HubCatalog(activeGames, categories, heroBannerUrls, bonusConfig, imageConfig)
         }
     }
 }

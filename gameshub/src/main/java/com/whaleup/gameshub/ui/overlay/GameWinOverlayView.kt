@@ -58,10 +58,11 @@ class GameWinOverlayView @JvmOverloads constructor(
             "Yayy, you earned for playing {gameName}!"
         ).replace("{gameName}", currentGameName)
 
-        val bonusConfig = BiomeState.getBonusConfig()
-        val treasureUrl = bonusConfig?.images?.treasureBox?.takeIf { it.isNotBlank() }
-            ?: "https://raw.githubusercontent.com/MoneyPlantAI/cdn-assets/main/whaleup/images/rewards/treasure-box.png"
-        ImageLoader.load(treasureUrl, ivRewardImage)
+        ivRewardImage.setImageResource(R.drawable.ic_coin_reward)
+        val treasureUrl = BiomeState.getImageConfig()?.treasureBox?.takeIf { it.isNotBlank() }
+        if (treasureUrl != null) {
+            ImageLoader.load(treasureUrl, ivRewardImage, preserveExistingImage = true)
+        }
 
         bringToFront()
         visibility = View.VISIBLE

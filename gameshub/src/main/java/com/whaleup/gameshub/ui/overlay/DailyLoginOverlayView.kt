@@ -92,9 +92,11 @@ class DailyLoginOverlayView @JvmOverloads constructor(
         tvCtaArrow.visibility = View.VISIBLE
 
         // Load treasure box image (with CDN fallback)
-        val treasureUrl = bonusConfig?.images?.treasureBox?.takeIf { it.isNotBlank() }
-            ?: "https://raw.githubusercontent.com/MoneyPlantAI/cdn-assets/main/whaleup/images/rewards/treasure-box.png"
-        ImageLoader.load(treasureUrl, ivTreasure)
+        ivTreasure.setImageResource(R.drawable.ic_coin_reward)
+        val treasureUrl = BiomeState.getImageConfig()?.treasureBox?.takeIf { it.isNotBlank() }
+        if (treasureUrl != null) {
+            ImageLoader.load(treasureUrl, ivTreasure, preserveExistingImage = true)
+        }
 
         val supercoinUrl = bonusConfig?.images?.supercoinIcon
         if (!supercoinUrl.isNullOrBlank()) {

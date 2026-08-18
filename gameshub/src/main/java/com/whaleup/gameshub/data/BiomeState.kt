@@ -36,11 +36,18 @@ object BiomeState {
     // Per-game session returned by game-start and sent only in game-end payloads.
     private var gameSessionId: String? = null
     private var bonusConfig: BonusConfig? = null
+    private var imageConfig: BonusConfigImages? = null
 
     fun getBonusConfig(): BonusConfig? = bonusConfig
 
     fun setBonusConfig(config: BonusConfig?) {
         bonusConfig = config
+    }
+
+    fun getImageConfig(): BonusConfigImages? = imageConfig
+
+    fun setImageConfig(config: BonusConfigImages?) {
+        imageConfig = config
     }
 
     /**
@@ -592,6 +599,7 @@ object BiomeState {
         sessionId = null
         gameSessionId = null
         bonusConfig = null
+        imageConfig = null
         prefs?.edit()
             ?.remove(USER_CONFIG_KEY)
             ?.remove("sessionId")
