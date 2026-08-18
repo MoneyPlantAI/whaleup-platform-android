@@ -24,7 +24,7 @@ object ContextProvider {
         
         // App Metadata
         val app = JSONObject()
-        app.put("version", "2.0.2")
+        app.put("version", "2.0.3")
         app.put("platform", "android")
         app.put("theme", "light")
         context.put("app", app)
